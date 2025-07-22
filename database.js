@@ -9,9 +9,9 @@ const connectDB = async () => {
         const client = new MongoClient(uri);
         await client.connect();
         db = client.db('EduGrid');
-        console.log('✅ Connected to MongoDB - EduGrid database');
+        console.log('Connected to MongoDB - EduGrid database');
     } catch (error) {
-        console.error('❌ Database connection failed:', error);
+        console.error('Database connection failed:', error);
         process.exit(1);
     }
 };

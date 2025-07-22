@@ -2,10 +2,9 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 
-// User Routes
-router.post('/', userController.createUser);           // POST /api/users
-router.get('/', userController.getAllUsers);          // GET /api/users
-router.get('/:email', userController.getUserByEmail); // GET /api/users/:email
-router.put('/:email', userController.updateUserProfile); // PUT /api/users/:email
+router.post('/', userController.createUser);
+router.get('/', userController.getAllUsers);
+router.get('/:email', userController.getUserByEmail);
+router.put('/:email', userController.updateUserProfile);
 
 module.exports = router;

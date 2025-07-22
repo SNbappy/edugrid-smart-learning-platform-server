@@ -4,7 +4,7 @@ const userController = {
     // Create User (Sign Up)
     createUser: async (req, res) => {
         try {
-            console.log('🎯 Creating user:', req.body);
+            console.log('Creating user:', req.body);
 
             const db = getDB();
             const usersCollection = db.collection('users');
@@ -22,7 +22,7 @@ const userController = {
             // Check if user exists
             const existingUser = await usersCollection.findOne({ email });
             if (existingUser) {
-                console.log('⚠️ User already exists:', email);
+                console.log('User already exists:', email);
                 return res.status(400).json({
                     success: false,
                     message: 'User already exists'
@@ -48,9 +48,9 @@ const userController = {
                 }
             };
 
-            console.log('💾 Inserting user into database');
+            console.log('Inserting user into database');
             const result = await usersCollection.insertOne(newUser);
-            console.log('✅ User created with ID:', result.insertedId);
+            console.log('User created with ID:', result.insertedId);
 
             res.status(201).json({
                 success: true,
@@ -60,7 +60,7 @@ const userController = {
             });
 
         } catch (error) {
-            console.error('❌ Error creating user:', error);
+            console.error('Error creating user:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to create user',
@@ -69,16 +69,15 @@ const userController = {
         }
     },
 
-    // Get All Users
     getAllUsers: async (req, res) => {
         try {
-            console.log('📋 Getting all users');
+            console.log('Getting all users');
 
             const db = getDB();
             const usersCollection = db.collection('users');
             const users = await usersCollection.find({}).toArray();
 
-            console.log(`✅ Found ${users.length} users`);
+            console.log(`Found ${users.length} users`);
 
             res.json({
                 success: true,
@@ -87,7 +86,7 @@ const userController = {
             });
 
         } catch (error) {
-            console.error('❌ Error getting users:', error);
+            console.error('Error getting users:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to get users',
@@ -107,21 +106,21 @@ const userController = {
             const user = await usersCollection.findOne({ email: email });
 
             if (!user) {
-                console.log('❌ User not found:', email);
+                console.log('User not found:', email);
                 return res.status(404).json({
                     success: false,
                     message: 'User not found'
                 });
             }
 
-            console.log('✅ User found:', email);
+            console.log('User found:', email);
             res.json({
                 success: true,
                 user: user
             });
 
         } catch (error) {
-            console.error('❌ Error getting user:', error);
+            console.error('Error getting user:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to get user',
@@ -130,13 +129,12 @@ const userController = {
         }
     },
 
-    // Update User Profile
     updateUserProfile: async (req, res) => {
         try {
             const email = req.params.email;
             const updateData = req.body;
-
-            console.log('📝 Updating user profile:', email);
+ 
+            console.log('Updating user profile:', email);
 
             const db = getDB();
             const usersCollection = db.collection('users');
@@ -158,14 +156,14 @@ const userController = {
                 });
             }
 
-            console.log('✅ User profile updated successfully');
+            console.log('User profile updated successfully');
             res.json({
                 success: true,
                 message: 'User profile updated successfully'
             });
 
         } catch (error) {
-            console.error('❌ Error updating user profile:', error);
+            console.error('Error updating user profile:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to update user profile',
