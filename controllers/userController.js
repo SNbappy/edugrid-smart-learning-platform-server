@@ -1,17 +1,16 @@
 const { getDB } = require('../database');
 
 const userController = {
-    // Create User (Sign Up)
+    // Create User (Sign Up) - Fixed default role
     createUser: async (req, res) => {
         try {
-            console.log('Creating user:', req.body);
+            console.log('🎯 Creating user:', req.body);
 
             const db = getDB();
             const usersCollection = db.collection('users');
 
             const { name, email, photoURL, loginMethod } = req.body;
 
-            // Validation
             if (!email || !name) {
                 return res.status(400).json({
                     success: false,
@@ -22,35 +21,38 @@ const userController = {
             // Check if user exists
             const existingUser = await usersCollection.findOne({ email });
             if (existingUser) {
-                console.log('User already exists:', email);
+                console.log('⚠️ User already exists:', email);
                 return res.status(400).json({
                     success: false,
                     message: 'User already exists'
                 });
             }
 
-            // Create new user
+            // Create new user with "user" as default role
             const newUser = {
                 name: name,
                 email: email,
-                photoURL: photoURL || '',
+                photoURL: '',  // Keep blank for now
                 loginMethod: loginMethod || 'email_password',
-                role: 'teacher',
+                role: 'user',  // ✅ Changed from 'teacher' to 'user'
                 createdAt: new Date(),
                 lastLogin: new Date(),
                 isActive: true,
                 profile: {
-                    department: '',
-                    subject: '',
-                    phone: '',
-                    address: '',
-                    bio: ''
+                    bio: '',
+                    institution: '',
+                    country: '',
+                    district: '',
+                    city: '',
+                    facebook: '',
+                    linkedin: '',
+                    mailLink: ''
                 }
             };
 
-            console.log('Inserting user into database');
+            console.log('💾 Inserting user into database');
             const result = await usersCollection.insertOne(newUser);
-            console.log('User created with ID:', result.insertedId);
+            console.log('✅ User created with ID:', result.insertedId);
 
             res.status(201).json({
                 success: true,
@@ -60,7 +62,7 @@ const userController = {
             });
 
         } catch (error) {
-            console.error('Error creating user:', error);
+            console.error('❌ Error creating user:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to create user',
@@ -69,33 +71,80 @@ const userController = {
         }
     },
 
-    getAllUsers: async (req, res) => {
+    // Update User Profile - Remove role from updateable fields
+    updateUserProfile: async (req, res) => {
         try {
-            console.log('Getting all users');
+            const email = req.params.email;
+            const updateData = req.body;
+
+            console.log('📝 Updating user profile:', email);
+            console.log('📝 Update data:', updateData);
 
             const db = getDB();
             const usersCollection = db.collection('users');
-            const users = await usersCollection.find({}).toArray();
 
-            console.log(`Found ${users.length} users`);
+            // Separate root-level fields from profile fields
+            const rootFields = {};
+            const profileFields = {};
+
+            // Root level fields that can be updated (removed role)
+            if (updateData.name) rootFields.name = updateData.name;
+            if (updateData.email) rootFields.email = updateData.email;
+            if (updateData.photoURL !== undefined) rootFields.photoURL = updateData.photoURL;
+
+            // Profile fields
+            if (updateData.bio !== undefined) profileFields['profile.bio'] = updateData.bio;
+            if (updateData.country !== undefined) profileFields['profile.country'] = updateData.country;
+            if (updateData.district !== undefined) profileFields['profile.district'] = updateData.district;
+            if (updateData.city !== undefined) profileFields['profile.city'] = updateData.city;
+            if (updateData.institution !== undefined) profileFields['profile.institution'] = updateData.institution;
+            if (updateData.facebook !== undefined) profileFields['profile.facebook'] = updateData.facebook;
+            if (updateData.linkedin !== undefined) profileFields['profile.linkedin'] = updateData.linkedin;
+            if (updateData.mailLink !== undefined) profileFields['profile.mailLink'] = updateData.mailLink;
+
+            // Combine all fields for update (excluding role)
+            const updateFields = {
+                ...rootFields,
+                ...profileFields,
+                updatedAt: new Date()
+            };
+
+            console.log('📝 Final update fields:', updateFields);
+
+            const result = await usersCollection.updateOne(
+                { email: email },
+                { $set: updateFields }
+            );
+
+            if (result.matchedCount === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+
+            console.log('✅ User profile updated successfully');
+
+            // Get updated user to return
+            const updatedUser = await usersCollection.findOne({ email: email });
 
             res.json({
                 success: true,
-                count: users.length,
-                users: users
+                message: 'User profile updated successfully',
+                user: updatedUser
             });
 
         } catch (error) {
-            console.error('Error getting users:', error);
+            console.error('❌ Error updating user profile:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to get users',
+                message: 'Failed to update user profile',
                 error: error.message
             });
         }
     },
 
-    // Get User by Email
+    // ... rest of your methods remain the same
     getUserByEmail: async (req, res) => {
         try {
             const email = req.params.email;
@@ -106,21 +155,39 @@ const userController = {
             const user = await usersCollection.findOne({ email: email });
 
             if (!user) {
-                console.log('User not found:', email);
+                console.log('❌ User not found:', email);
                 return res.status(404).json({
                     success: false,
                     message: 'User not found'
                 });
             }
 
-            console.log('User found:', email);
+            // Migrate old schema if needed
+            if (!user.profile.hasOwnProperty('district') || !user.profile.hasOwnProperty('city')) {
+                console.log('🔄 Migrating user schema for:', email);
+
+                const migratedProfile = {
+                    ...user.profile,
+                    district: user.profile.district || '',
+                    city: user.profile.city || ''
+                };
+
+                await usersCollection.updateOne(
+                    { email: email },
+                    { $set: { profile: migratedProfile } }
+                );
+
+                user.profile = migratedProfile;
+            }
+
+            console.log('✅ User found:', email);
             res.json({
                 success: true,
                 user: user
             });
 
         } catch (error) {
-            console.error('Error getting user:', error);
+            console.error('❌ Error getting user:', error);
             res.status(500).json({
                 success: false,
                 message: 'Failed to get user',
@@ -129,44 +196,27 @@ const userController = {
         }
     },
 
-    updateUserProfile: async (req, res) => {
+    getAllUsers: async (req, res) => {
         try {
-            const email = req.params.email;
-            const updateData = req.body;
- 
-            console.log('Updating user profile:', email);
+            console.log('📋 Getting all users');
 
             const db = getDB();
             const usersCollection = db.collection('users');
+            const users = await usersCollection.find({}).toArray();
 
-            const result = await usersCollection.updateOne(
-                { email: email },
-                {
-                    $set: {
-                        ...updateData,
-                        updatedAt: new Date()
-                    }
-                }
-            );
+            console.log(`✅ Found ${users.length} users`);
 
-            if (result.matchedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                });
-            }
-
-            console.log('User profile updated successfully');
             res.json({
                 success: true,
-                message: 'User profile updated successfully'
+                count: users.length,
+                users: users
             });
 
         } catch (error) {
-            console.error('Error updating user profile:', error);
+            console.error('❌ Error getting users:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to update user profile',
+                message: 'Failed to get users',
                 error: error.message
             });
         }
