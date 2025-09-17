@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const classroomController = require('../controllers/classroomController');
+const attendanceController = require('../controllers/classroom/attendanceController');
 
 // Add logging middleware for debugging
 router.use((req, res, next) => {
@@ -63,18 +64,25 @@ router.delete('/:id/materials/:materialId', classroomController.deleteMaterial);
 router.put('/:id/materials/:materialId', classroomController.updateMaterial);
 
 // ===== ATTENDANCE ROUTES =====
+// FIXED: Updated routes to match frontend calls and use attendanceController
 
 // GET /api/classrooms/:id/attendance - Get attendance data
-router.get('/:id/attendance', classroomController.getAttendance);
+router.get('/:id/attendance', attendanceController.getAttendance);
 
-// POST /api/classrooms/:id/attendance - Create attendance session
-router.post('/:id/attendance', classroomController.createAttendanceSession);
+// POST /api/classrooms/:id/attendance/sessions - Create attendance session
+router.post('/:id/attendance/sessions', attendanceController.createAttendanceSession);
 
-// PUT /api/classrooms/:id/attendance/:sessionId - Update attendance session
-router.put('/:id/attendance/:sessionId', classroomController.updateAttendanceSession);
+// GET /api/classrooms/:id/attendance/sessions/:sessionId - Get specific session
+router.get('/:id/attendance/sessions/:sessionId', attendanceController.getAttendanceSession);
 
-// POST /api/classrooms/:id/attendance/:sessionId/mark - Mark attendance
-router.post('/:id/attendance/:sessionId/mark', classroomController.markAttendance);
+// PUT /api/classrooms/:id/attendance/sessions/:sessionId - Update attendance session
+router.put('/:id/attendance/sessions/:sessionId', attendanceController.updateAttendanceSession);
+
+// POST /api/classrooms/:id/attendance/sessions/:sessionId/mark - Mark attendance
+router.post('/:id/attendance/sessions/:sessionId/mark', attendanceController.markAttendance);
+
+// DELETE /api/classrooms/:id/attendance/sessions/:sessionId - Delete session
+router.delete('/:id/attendance/sessions/:sessionId', attendanceController.deleteAttendanceSession);
 
 // ===== TASKS/ASSIGNMENTS ROUTES =====
 

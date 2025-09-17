@@ -44,145 +44,121 @@ const materialsController = {
     addMaterial: async (req, res) => {
         try {
             const classroomId = req.params.id;
-
-            // Add detailed logging
-            console.log('➕ Adding material to classroom:', classroomId);
-            console.log('📝 Request body received:', JSON.stringify(req.body, null, 2));
-
-            // Handle both old and new field names for backward compatibility
             const {
-                // New field names (from frontend)
-                name,
-                fileUrl,
+                title,
+                description,
+                type,
+                url,
+                youtubeUrl,
+                embedUrl,
                 fileName,
                 fileSize,
                 fileType,
-                category,
-                publicId,
-                resourceType,
-
-                // Old field names (for backward compatibility)
-                type,
-                title,
-                url,
-
-                // Common fields
-                description,
-                uploadedBy
+                publicId
             } = req.body;
 
-            // Map the fields to what we need
-            const materialTitle = title || name || fileName;
-            const materialUrl = url || fileUrl;
-            const materialType = type || (category === 'document' ? 'file' : category);
+            console.log('➕ Adding material:', { title, type, url, youtubeUrl, embedUrl });
+            console.log('📝 Full request body:', JSON.stringify(req.body, null, 2));
 
-            console.log('🔍 Mapped fields:', {
-                materialTitle,
-                materialUrl,
-                materialType,
-                description,
-                uploadedBy
-            });
-
-            // Validation with detailed logging
-            if (!materialType) {
-                console.log('❌ Missing type/category field');
+            // Basic validation
+            if (!title || !title.trim()) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Material type or category is required',
-                    received: { type, category, name, title }
+                    message: 'Title is required'
                 });
             }
 
-            if (!materialTitle) {
-                console.log('❌ Missing title/name field');
+            if (!type) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Material title or name is required',
-                    received: { title, name, fileName }
+                    message: 'Material type is required'
                 });
             }
 
-            if (!materialUrl) {
-                console.log('❌ Missing url/fileUrl field');
-                return res.status(400).json({
-                    success: false,
-                    message: 'Material URL or fileUrl is required',
-                    received: { url, fileUrl }
-                });
-            }
-
-            // Validate classroom ID format
+            // Validate classroom ID
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
-                console.log('❌ Invalid classroom ID format:', classroomId);
                 return res.status(400).json({
                     success: false,
                     message: validation.message
                 });
             }
 
-            console.log('✅ All validations passed, proceeding with database update');
-
             const db = getDB();
-
-            // Check if classroom exists first
             const classroom = await findClassroom(db, classroomId);
 
             if (!classroom) {
-                console.log('❌ Classroom not found:', classroomId);
                 return res.status(404).json({
                     success: false,
                     message: 'Classroom not found'
                 });
             }
 
-            console.log('✅ Classroom found, creating material object');
-
-            // In your materialsController.js addMaterial function
+            // Create base material object
             const material = {
                 id: new ObjectId(),
-                title: materialTitle,
-                url: materialUrl, // Store the base URL without transformations
-                downloadUrl: `${materialUrl}?fl_attachment=true`, // Add separate download URL
-                viewUrl: materialUrl, // URL for viewing/preview
-                description: description || '',
-                fileName: fileName || materialTitle,
-                fileSize: fileSize || null,
-                fileType: fileType || null,
-                category: category || 'document',
-                publicId: publicId || null,
-                resourceType: resourceType || 'raw',
+                title: title.trim(),
+                description: description?.trim() || '',
+                type: type,
                 uploadedAt: new Date(),
-                uploadedBy: uploadedBy || 'teacher'
+                uploadedBy: req.user?.email || 'teacher'
             };
 
+            // Handle different material types
+            let dbFieldType = 'files'; // default
 
-            console.log('📋 Material object created:', material);
+            if (type === 'youtube') {
+                if (!youtubeUrl || !embedUrl) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'YouTube URL and embed URL are required for YouTube videos'
+                    });
+                }
 
-            // Map frontend types to database field names
-            const typeMapping = {
-                'file': 'files',
-                'document': 'files',  // Handle 'document' category
-                'link': 'links',
-                'video': 'videos'
-            };
+                material.youtubeUrl = youtubeUrl;
+                material.embedUrl = embedUrl;
+                material.url = youtubeUrl; // Store original URL too
+                dbFieldType = 'videos';
 
-            const dbFieldType = typeMapping[materialType] || 'files';
-            const validTypes = ['files', 'links', 'videos'];
+            } else if (type === 'link') {
+                if (!url) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'URL is required for web links'
+                    });
+                }
 
-            if (!validTypes.includes(dbFieldType)) {
-                console.log('❌ Invalid material type:', materialType, 'mapped to:', dbFieldType);
+                material.url = url;
+                dbFieldType = 'links';
+
+            } else if (type === 'file') {
+                if (!url) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'File URL is required for file uploads'
+                    });
+                }
+
+                material.url = url;
+                material.fileUrl = url;
+                material.fileName = fileName || title;
+                material.fileSize = fileSize || null;
+                material.fileType = fileType || null;
+                material.publicId = publicId || null;
+                dbFieldType = 'files';
+
+            } else {
                 return res.status(400).json({
                     success: false,
-                    message: `Invalid material type. Received: ${materialType}`,
-                    receivedType: materialType
+                    message: `Invalid material type: ${type}. Must be 'youtube', 'link', or 'file'`
                 });
             }
 
-            const updateField = `materials.${dbFieldType}`;
-            console.log('🔄 Updating field:', updateField);
+            console.log('📋 Created material object:', material);
+            console.log('🗂️ Will store in field:', dbFieldType);
 
+            // Add to database
+            const updateField = `materials.${dbFieldType}`;
             const result = await db.collection('classrooms').updateOne(
                 { _id: new ObjectId(classroomId) },
                 {
@@ -190,8 +166,6 @@ const materialsController = {
                     $set: { updatedAt: new Date() }
                 }
             );
-
-            console.log('📊 Database update result:', result);
 
             if (result.matchedCount === 0) {
                 return res.status(404).json({
@@ -207,12 +181,12 @@ const materialsController = {
                 });
             }
 
-            console.log('✅ Material added successfully');
+            console.log('✅ Material added successfully to', updateField);
 
-            res.json({
+            res.status(201).json({
                 success: true,
                 message: 'Material added successfully',
-                material
+                material: material
             });
 
         } catch (error) {
@@ -220,7 +194,7 @@ const materialsController = {
             console.error('❌ Error stack:', error.stack);
             res.status(500).json({
                 success: false,
-                message: 'Failed to add material',
+                message: 'Internal server error while adding material',
                 error: error.message
             });
         }
@@ -229,9 +203,8 @@ const materialsController = {
     deleteMaterial: async (req, res) => {
         try {
             const { id: classroomId, materialId } = req.params;
-            const { type, category } = req.query;
 
-            console.log('🗑️ Deleting material:', { classroomId, materialId, type, category });
+            console.log('🗑️ Backend: Attempting to delete material:', { classroomId, materialId });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -241,40 +214,80 @@ const materialsController = {
                 });
             }
 
-            const materialType = type || category;
-            if (!materialType) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Material type or category is required'
-                });
-            }
-
-            // Map frontend types to database field names
-            const typeMapping = {
-                'file': 'files',
-                'document': 'files',
-                'link': 'links',
-                'video': 'videos'
-            };
-
-            const dbFieldType = typeMapping[materialType] || 'files';
             const db = getDB();
-            const updateField = `materials.${dbFieldType}`;
 
-            const result = await db.collection('classrooms').updateOne(
-                { _id: new ObjectId(classroomId) },
-                {
-                    $pull: { [updateField]: { id: new ObjectId(materialId) } },
-                    $set: { updatedAt: new Date() }
-                }
-            );
-
-            if (result.matchedCount === 0) {
+            // First, find which array contains this material
+            const classroom = await findClassroom(db, classroomId);
+            if (!classroom) {
                 return res.status(404).json({
                     success: false,
                     message: 'Classroom not found'
                 });
             }
+
+            console.log('🔍 Searching for material in all arrays...');
+
+            // Search in all three arrays to find the material
+            const materialArrays = [
+                { fieldName: 'materials.files', array: classroom.materials?.files || [], type: 'file' },
+                { fieldName: 'materials.videos', array: classroom.materials?.videos || [], type: 'youtube' },
+                { fieldName: 'materials.links', array: classroom.materials?.links || [], type: 'link' }
+            ];
+
+            let foundInField = null;
+            let foundMaterial = null;
+
+            for (const { fieldName, array, type } of materialArrays) {
+                const found = array.find(m => m.id.toString() === materialId);
+                if (found) {
+                    foundInField = fieldName;
+                    foundMaterial = found;
+                    console.log(`✅ Found material in ${fieldName}:`, found.title);
+                    break;
+                }
+            }
+
+            if (!foundInField) {
+                console.error('❌ Material not found in any array:', materialId);
+                return res.status(404).json({
+                    success: false,
+                    message: 'Material not found'
+                });
+            }
+
+            // Delete from the correct array
+            console.log(`🗂️ Deleting from ${foundInField}`);
+
+            const result = await db.collection('classrooms').updateOne(
+                { _id: new ObjectId(classroomId) },
+                {
+                    $pull: { [foundInField]: { id: new ObjectId(materialId) } },
+                    $set: { updatedAt: new Date() }
+                }
+            );
+
+            console.log('📊 Delete operation result:', {
+                matchedCount: result.matchedCount,
+                modifiedCount: result.modifiedCount,
+                foundInField,
+                materialTitle: foundMaterial.title
+            });
+
+            if (result.matchedCount === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Classroom not found during deletion'
+                });
+            }
+
+            if (result.modifiedCount === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Material not found or already deleted'
+                });
+            }
+
+            console.log('✅ Material successfully deleted from database');
 
             res.json({
                 success: true,
@@ -374,191 +387,3 @@ const materialsController = {
 };
 
 module.exports = materialsController;
-addMaterial: async (req, res) => {
-    try {
-        const classroomId = req.params.id;
-
-        // Add detailed logging
-        console.log('➕ Adding material to classroom:', classroomId);
-        console.log('📝 Request body received:', JSON.stringify(req.body, null, 2));
-        console.log('📝 Request headers:', req.headers['content-type']);
-
-        const {
-            // Frontend sends these fields for web links
-            name,
-            title,
-            description,
-            url,
-            type,
-
-            // File-specific fields (might be missing for links)
-            fileUrl,
-            fileName,
-            fileSize,
-            fileType,
-            category,
-            publicId,
-            resourceType,
-            uploadedBy
-        } = req.body;
-
-        console.log('🔍 Extracted fields:', {
-            name, title, description, url, type, category,
-            fileUrl, fileName, fileSize, fileType
-        });
-
-        // Map the fields to what we need
-        const materialTitle = title || name;
-        const materialUrl = url || fileUrl;
-        const materialType = type || category;
-
-        console.log('🔄 Mapped fields:', {
-            materialTitle,
-            materialUrl,
-            materialType
-        });
-
-        // Enhanced validation with specific error messages
-        if (!materialType) {
-            console.log('❌ Missing type field');
-            return res.status(400).json({
-                success: false,
-                message: 'Material type is required',
-                received: { type, category, name, title },
-                debug: 'Either type or category field must be provided'
-            });
-        }
-
-        if (!materialTitle) {
-            console.log('❌ Missing title field');
-            return res.status(400).json({
-                success: false,
-                message: 'Material title is required',
-                received: { title, name },
-                debug: 'Either title or name field must be provided'
-            });
-        }
-
-        if (!materialUrl) {
-            console.log('❌ Missing url field');
-            return res.status(400).json({
-                success: false,
-                message: 'Material URL is required',
-                received: { url, fileUrl },
-                debug: 'Either url or fileUrl field must be provided'
-            });
-        }
-
-        // Validate classroom ID format
-        const validation = validateClassroomId(classroomId);
-        if (!validation.valid) {
-            console.log('❌ Invalid classroom ID format:', classroomId);
-            return res.status(400).json({
-                success: false,
-                message: validation.message
-            });
-        }
-
-        console.log('✅ All validations passed, proceeding with database update');
-
-        const db = getDB();
-
-        // Check if classroom exists first
-        const classroom = await findClassroom(db, classroomId);
-
-        if (!classroom) {
-            console.log('❌ Classroom not found:', classroomId);
-            return res.status(404).json({
-                success: false,
-                message: 'Classroom not found'
-            });
-        }
-
-        console.log('✅ Classroom found, creating material object');
-
-        // Create material object with proper fallbacks for web links
-        const material = {
-            id: new ObjectId(),
-            title: materialTitle,
-            url: materialUrl,
-            description: description || '',
-            fileName: fileName || materialTitle, // Use title as filename for links
-            fileSize: fileSize || null, // Links don't have file size
-            fileType: fileType || 'text/html', // Default for web links
-            category: category || 'link', // Default category for links
-            publicId: publicId || null, // Links don't have Cloudinary public ID
-            resourceType: resourceType || 'link', // Set as 'link' type
-            uploadedAt: new Date(),
-            uploadedBy: uploadedBy || 'teacher'
-        };
-
-        console.log('📋 Material object created:', material);
-
-        // Enhanced type mapping for web links
-        const typeMapping = {
-            'file': 'files',
-            'document': 'files',
-            'link': 'links',    // ← This is key for web links
-            'video': 'videos'
-        };
-
-        const dbFieldType = typeMapping[materialType] || 'links'; // Default to links
-        console.log('🗂️ Database field type:', dbFieldType);
-
-        const validTypes = ['files', 'links', 'videos'];
-
-        if (!validTypes.includes(dbFieldType)) {
-            console.log('❌ Invalid material type:', materialType, 'mapped to:', dbFieldType);
-            return res.status(400).json({
-                success: false,
-                message: `Invalid material type. Received: ${materialType}`,
-                receivedType: materialType,
-                validTypes: validTypes
-            });
-        }
-
-        const updateField = `materials.${dbFieldType}`;
-        console.log('🔄 Updating field:', updateField);
-
-        const result = await db.collection('classrooms').updateOne(
-            { _id: new ObjectId(classroomId) },
-            {
-                $push: { [updateField]: material },
-                $set: { updatedAt: new Date() }
-            }
-        );
-
-        console.log('📊 Database update result:', result);
-
-        if (result.matchedCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Classroom not found during update'
-            });
-        }
-
-        if (result.modifiedCount === 0) {
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to add material to classroom'
-            });
-        }
-
-        console.log('✅ Material added successfully');
-
-        res.json({
-            success: true,
-            message: 'Material added successfully',
-            material
-        });
-
-    } catch (error) {
-        console.error('❌ Error adding material:', error);
-        console.error('❌ Error stack:', error.stack);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to add material',
-            error: error.message
-        });
-    }
-}
