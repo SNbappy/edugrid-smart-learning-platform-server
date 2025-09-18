@@ -1,23 +1,44 @@
+const taskOperations = require('./taskOperations');
+const submissionOperations = require('./submissionOperations');
 const { getDB } = require('../../database');
 const { ObjectId } = require('mongodb');
-const { validateClassroomId, findClassroom } = require('../helpers/classroomHelpers');
+const { getUserEmailFromRequest, isInstructor, getTaskPermissions } = require('./submissionAccess');
 
 const tasksController = {
-    getTasks: async (req, res) => {
-        try {
-            const classroomId = req.params.id;
-            console.log('📝 Getting tasks for classroom:', classroomId);
+    // ==================== TASK OPERATIONS ====================
+    
+    // Get all tasks for a classroom
+    getTasks: taskOperations.getTasks,
+    
+    // Create a new task
+    createTask: taskOperations.createTask,
+    
+    // Update an existing task
+    updateTask: taskOperations.updateTask,
+    
+    // Delete a task
+    deleteTask: taskOperations.deleteTask,
+    
+    // Get a specific task by ID
+    getTaskById: taskOperations.getTaskById,
 
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
+    // Get task with user-specific permissions and status
+    getTaskWithPermissions: async (req, res) => {
+        try {
+            const { classroomId, taskId } = req.params;
+            const userEmail = getUserEmailFromRequest(req);
+
+            if (!userEmail) {
+                return res.status(401).json({
                     success: false,
-                    message: validation.message
+                    message: 'User authentication required'
                 });
             }
 
             const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
 
             if (!classroom) {
                 return res.status(404).json({
@@ -26,135 +47,88 @@ const tasksController = {
                 });
             }
 
-            // Sort tasks by creation date (newest first)
-            const tasks = classroom?.tasks?.assignments || [];
-            const sortedTasks = tasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-            res.json({
-                success: true,
-                tasks: sortedTasks,
-                count: sortedTasks.length
-            });
-
-        } catch (error) {
-            console.error('❌ Error getting tasks:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Failed to get tasks',
-                error: error.message
-            });
-        }
-    },
-
-    createTask: async (req, res) => {
-        try {
-            const classroomId = req.params.id;
-            const {
-                title,
-                description,
-                dueDate,
-                points,
-                type = 'Assignment',
-                instructions,
-                attachments = []
-            } = req.body;
-
-            console.log('➕ Creating task for classroom:', classroomId);
-
-            if (!title) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Task title is required'
-                });
-            }
-
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    success: false,
-                    message: validation.message
-                });
-            }
-
-            const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
-
-            if (!classroom) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Classroom not found'
-                });
-            }
-
-            const task = {
-                id: new ObjectId(),
-                title,
-                description: description || '',
-                instructions: instructions || '',
-                dueDate: dueDate ? new Date(dueDate) : null,
-                points: parseInt(points) || 0,
-                type: type,
-                attachments: attachments,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                isCompleted: false,
-                isPublished: true,
-                submissions: [],
-                stats: {
-                    totalSubmissions: 0,
-                    gradedSubmissions: 0,
-                    averageScore: 0
-                }
-            };
-
-            const result = await db.collection('classrooms').updateOne(
-                { _id: new ObjectId(classroomId) },
-                {
-                    $push: { 'tasks.assignments': task },
-                    $set: { updatedAt: new Date() }
-                }
+            const task = classroom.tasks?.assignments?.find(t =>
+                t._id?.toString() === taskId || t.id?.toString() === taskId
             );
 
-            if (result.matchedCount === 0) {
+            if (!task) {
                 return res.status(404).json({
                     success: false,
-                    message: 'Classroom not found'
+                    message: 'Task not found'
                 });
             }
 
-            console.log('✅ Task created successfully');
-
-            res.json({
-                success: true,
-                message: 'Task created successfully',
+            const permissions = getTaskPermissions(
+                { email: userEmail },
+                classroom,
                 task
+            );
+
+            res.json({
+                success: true,
+                task: task,
+                permissions: permissions,
+                userEmail: userEmail
             });
 
         } catch (error) {
-            console.error('❌ Error creating task:', error);
+            console.error('❌ Error getting task with permissions:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to create task',
+                message: 'Failed to get task details',
                 error: error.message
             });
         }
     },
 
-    getTaskById: async (req, res) => {
-        try {
-            const { id: classroomId, taskId } = req.params;
-            console.log('🔍 Getting task by ID:', { classroomId, taskId });
+    // ==================== SUBMISSION OPERATIONS ====================
+    
+    // Submit a new task
+    submitTask: submissionOperations.submitTask,
+    
+    // Resubmit an existing task
+    resubmitTask: submissionOperations.resubmitTask,
+    
+    // Get all submissions for a task
+    getTaskSubmissions: submissionOperations.getTaskSubmissions,
+    
+    // Get a specific submission by ID
+    getSubmissionById: submissionOperations.getSubmissionById,
+    
+    // Grade a submission
+    gradeSubmission: submissionOperations.gradeSubmission,
 
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
+    // ==================== ADDITIONAL UTILITY METHODS ====================
+    
+    // Get current user's submission for a task
+    getMySubmission: submissionOperations.getMySubmission,
+    
+    // Get submission status for current user
+    getSubmissionStatus: submissionOperations.getSubmissionStatus,
+    
+    // Update an existing submission (for resubmissions)
+    updateSubmission: submissionOperations.updateSubmission,
+    
+    // Delete a submission (if allowed)
+    deleteSubmission: submissionOperations.deleteSubmission,
+
+    // Check if user can submit/resubmit a task
+    checkSubmissionEligibility: async (req, res) => {
+        try {
+            const { classroomId, taskId } = req.params;
+            const userEmail = getUserEmailFromRequest(req);
+
+            if (!userEmail) {
+                return res.status(401).json({
                     success: false,
-                    message: validation.message
+                    message: 'User authentication required'
                 });
             }
 
             const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
 
             if (!classroom) {
                 return res.status(404).json({
@@ -164,7 +138,7 @@ const tasksController = {
             }
 
             const task = classroom.tasks?.assignments?.find(t =>
-                t.id.toString() === taskId
+                t._id?.toString() === taskId || t.id?.toString() === taskId
             );
 
             if (!task) {
@@ -174,167 +148,59 @@ const tasksController = {
                 });
             }
 
-            // Add computed stats
-            const taskWithStats = {
-                ...task,
-                computedStats: {
-                    submissionCount: task.submissions?.length || 0,
-                    isOverdue: task.dueDate ? new Date() > new Date(task.dueDate) : false,
-                    daysUntilDue: task.dueDate ?
-                        Math.ceil((new Date(task.dueDate) - new Date()) / (1000 * 60 * 60 * 24)) : null
-                }
-            };
+            const permissions = getTaskPermissions(
+                { email: userEmail },
+                classroom,
+                task
+            );
 
             res.json({
                 success: true,
-                task: taskWithStats
-            });
-
-        } catch (error) {
-            console.error('❌ Error getting task:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Failed to get task',
-                error: error.message
-            });
-        }
-    },
-
-    updateTask: async (req, res) => {
-        try {
-            const { id: classroomId, taskId } = req.params;
-            const updateData = req.body;
-
-            console.log('📝 Updating task:', { classroomId, taskId });
-
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    success: false,
-                    message: validation.message
-                });
-            }
-
-            const db = getDB();
-
-            // Create update fields for the specific task
-            const updateFields = {};
-            const allowedFields = ['title', 'description', 'instructions', 'dueDate', 'points', 'type', 'isPublished'];
-
-            allowedFields.forEach(field => {
-                if (updateData[field] !== undefined) {
-                    updateFields[`tasks.assignments.$.${field}`] = updateData[field];
-                }
-            });
-
-            updateFields['tasks.assignments.$.updatedAt'] = new Date();
-            updateFields.updatedAt = new Date();
-
-            const result = await db.collection('classrooms').updateOne(
-                {
-                    _id: new ObjectId(classroomId),
-                    'tasks.assignments.id': new ObjectId(taskId)
+                eligibility: {
+                    canSubmit: permissions.canSubmit,
+                    canResubmit: permissions.canResubmit,
+                    hasSubmitted: permissions.submissionStatus.hasSubmitted,
+                    isOverdue: permissions.submissionStatus.isOverdue,
+                    isGraded: permissions.submissionStatus.isGraded,
+                    existingSubmission: permissions.submissionStatus.existingSubmission
                 },
-                { $set: updateFields }
-            );
-
-            if (result.matchedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Classroom or task not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Task updated successfully'
-            });
-
-        } catch (error) {
-            console.error('❌ Error updating task:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Failed to update task',
-                error: error.message
-            });
-        }
-    },
-
-    deleteTask: async (req, res) => {
-        try {
-            const { id: classroomId, taskId } = req.params;
-
-            console.log('🗑️ Deleting task:', { classroomId, taskId });
-
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    success: false,
-                    message: validation.message
-                });
-            }
-
-            const db = getDB();
-            const result = await db.collection('classrooms').updateOne(
-                { _id: new ObjectId(classroomId) },
-                {
-                    $pull: { 'tasks.assignments': { id: new ObjectId(taskId) } },
-                    $set: { updatedAt: new Date() }
+                reasons: {
+                    submitReason: permissions.submissionStatus.submitReason,
+                    resubmitReason: permissions.submissionStatus.resubmitReason
                 }
-            );
-
-            if (result.matchedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Classroom not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Task deleted successfully'
             });
 
         } catch (error) {
-            console.error('❌ Error deleting task:', error);
+            console.error('❌ Error checking submission eligibility:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to delete task',
+                message: 'Failed to check submission eligibility',
                 error: error.message
             });
         }
     },
 
-    submitTask: async (req, res) => {
+    // ==================== BULK OPERATIONS FOR TEACHERS ====================
+    
+    // Get all submissions for a task (teacher view)
+    getAllSubmissionsForTask: submissionOperations.getAllSubmissionsForTask,
+    
+    // Grade multiple submissions at once
+    gradeMultipleSubmissions: submissionOperations.gradeMultipleSubmissions,
+    
+    // Export submissions to CSV or other formats
+    exportSubmissions: submissionOperations.exportSubmissions,
+
+    // Bulk download all submission files
+    downloadAllSubmissions: async (req, res) => {
         try {
-            const { id: classroomId, taskId } = req.params;
-            const {
-                studentEmail,
-                studentName,
-                submissionText,
-                submissionUrl,
-                attachments = []
-            } = req.body;
-
-            console.log('📤 Submitting task:', { classroomId, taskId, studentEmail });
-
-            if (!studentEmail) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Student email is required'
-                });
-            }
-
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    success: false,
-                    message: validation.message
-                });
-            }
+            const { classroomId, taskId } = req.params;
+            const userEmail = getUserEmailFromRequest(req);
 
             const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
 
             if (!classroom) {
                 return res.status(404).json({
@@ -343,9 +209,15 @@ const tasksController = {
                 });
             }
 
-            // Check if task exists
+            if (!isInstructor({ email: userEmail }, classroom)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. Only instructors can download submissions.'
+                });
+            }
+
             const task = classroom.tasks?.assignments?.find(t =>
-                t.id.toString() === taskId
+                t._id?.toString() === taskId || t.id?.toString() === taskId
             );
 
             if (!task) {
@@ -355,84 +227,49 @@ const tasksController = {
                 });
             }
 
-            // Check if student already submitted
-            const existingSubmission = task.submissions?.find(s =>
-                s.studentEmail === studentEmail
+            const submissions = task.submissions || [];
+            const submissionsWithFiles = submissions.filter(sub => 
+                sub.attachments && sub.attachments.length > 0
             );
-
-            if (existingSubmission) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'You have already submitted this task'
-                });
-            }
-
-            const submission = {
-                id: new ObjectId(),
-                studentEmail,
-                studentName: studentName || '',
-                submissionText: submissionText || '',
-                submissionUrl: submissionUrl || '',
-                attachments: attachments,
-                submittedAt: new Date(),
-                status: 'submitted',
-                grade: null,
-                feedback: '',
-                gradedAt: null,
-                gradedBy: null
-            };
-
-            // Add submission to the task
-            const result = await db.collection('classrooms').updateOne(
-                {
-                    _id: new ObjectId(classroomId),
-                    'tasks.assignments.id': new ObjectId(taskId)
-                },
-                {
-                    $push: { 'tasks.assignments.$.submissions': submission },
-                    $inc: { 'tasks.assignments.$.stats.totalSubmissions': 1 },
-                    $set: { updatedAt: new Date() }
-                }
-            );
-
-            if (result.matchedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Failed to submit task'
-                });
-            }
 
             res.json({
                 success: true,
-                message: 'Task submitted successfully',
-                submission
+                message: `Found ${submissionsWithFiles.length} submissions with files`,
+                submissions: submissionsWithFiles.map(sub => ({
+                    studentEmail: sub.studentEmail,
+                    studentName: sub.studentName,
+                    submittedAt: sub.submittedAt,
+                    attachments: sub.attachments
+                }))
             });
 
         } catch (error) {
-            console.error('❌ Error submitting task:', error);
+            console.error('❌ Error downloading submissions:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to submit task',
+                message: 'Failed to download submissions',
                 error: error.message
             });
         }
     },
 
-    getTaskSubmissions: async (req, res) => {
-        try {
-            const { id: classroomId, taskId } = req.params;
-            console.log('📋 Getting task submissions:', { classroomId, taskId });
+    // ==================== PERMISSION AND VALIDATION HELPERS ====================
+    
+    // Validate submission permissions
+    validateSubmissionPermissions: submissionOperations.validateSubmissionPermissions,
+    
+    // Check resubmission eligibility
+    checkResubmissionEligibility: submissionOperations.checkResubmissionEligibility,
 
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    success: false,
-                    message: validation.message
-                });
-            }
+    // Validate task deadline
+    validateTaskDeadline: async (req, res) => {
+        try {
+            const { classroomId, taskId } = req.params;
 
             const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
 
             if (!classroom) {
                 return res.status(404).json({
@@ -442,7 +279,7 @@ const tasksController = {
             }
 
             const task = classroom.tasks?.assignments?.find(t =>
-                t.id.toString() === taskId
+                t._id?.toString() === taskId || t.id?.toString() === taskId
             );
 
             if (!task) {
@@ -452,22 +289,193 @@ const tasksController = {
                 });
             }
 
+            const now = new Date();
+            const dueDate = new Date(task.dueDate);
+            const isOverdue = now > dueDate;
+            const timeRemaining = dueDate.getTime() - now.getTime();
+
             res.json({
                 success: true,
-                submissions: task.submissions || [],
-                count: task.submissions?.length || 0,
-                taskTitle: task.title
+                deadline: {
+                    dueDate: task.dueDate,
+                    isOverdue: isOverdue,
+                    timeRemaining: isOverdue ? 0 : timeRemaining,
+                    timeRemainingFormatted: isOverdue ? 'Overdue' : formatTimeRemaining(timeRemaining)
+                }
             });
 
         } catch (error) {
-            console.error('❌ Error getting task submissions:', error);
+            console.error('❌ Error validating task deadline:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to get task submissions',
+                message: 'Failed to validate task deadline',
+                error: error.message
+            });
+        }
+    },
+
+    // ==================== ANALYTICS AND STATISTICS ====================
+    
+    // Get task statistics
+    getTaskStatistics: submissionOperations.getTaskStatistics,
+    
+    // Get student submission history
+    getStudentSubmissionHistory: submissionOperations.getStudentSubmissionHistory,
+
+    // Get comprehensive task analytics
+    getTaskAnalytics: async (req, res) => {
+        try {
+            const { classroomId, taskId } = req.params;
+            const userEmail = getUserEmailFromRequest(req);
+
+            const db = getDB();
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
+
+            if (!classroom) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Classroom not found'
+                });
+            }
+
+            if (!isInstructor({ email: userEmail }, classroom)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. Only instructors can view analytics.'
+                });
+            }
+
+            const task = classroom.tasks?.assignments?.find(t =>
+                t._id?.toString() === taskId || t.id?.toString() === taskId
+            );
+
+            if (!task) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Task not found'
+                });
+            }
+
+            const submissions = task.submissions || [];
+            const totalStudents = classroom.students?.length || 0;
+            const submittedCount = submissions.length;
+            const gradedCount = submissions.filter(sub => sub.grade !== null && sub.grade !== undefined).length;
+            const resubmissionCount = submissions.filter(sub => sub.status === 'resubmitted').length;
+
+            // Calculate average grade
+            const gradedSubmissions = submissions.filter(sub => sub.grade !== null && sub.grade !== undefined);
+            const averageGrade = gradedSubmissions.length > 0 
+                ? gradedSubmissions.reduce((sum, sub) => sum + parseFloat(sub.grade), 0) / gradedSubmissions.length
+                : null;
+
+            res.json({
+                success: true,
+                analytics: {
+                    totalStudents: totalStudents,
+                    submittedCount: submittedCount,
+                    gradedCount: gradedCount,
+                    resubmissionCount: resubmissionCount,
+                    submissionRate: totalStudents > 0 ? (submittedCount / totalStudents * 100).toFixed(1) : 0,
+                    gradingRate: submittedCount > 0 ? (gradedCount / submittedCount * 100).toFixed(1) : 0,
+                    averageGrade: averageGrade ? averageGrade.toFixed(2) : null,
+                    dueDate: task.dueDate,
+                    isOverdue: new Date() > new Date(task.dueDate),
+                    createdAt: task.createdAt,
+                    lastSubmission: submissions.length > 0 ? 
+                        Math.max(...submissions.map(sub => new Date(sub.submittedAt).getTime())) : null
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error getting task analytics:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to get task analytics',
+                error: error.message
+            });
+        }
+    },
+
+    // ==================== NOTIFICATION AND COMMUNICATION ====================
+    
+    // Send reminders to students who haven't submitted
+    sendSubmissionReminders: async (req, res) => {
+        try {
+            const { classroomId, taskId } = req.params;
+            const userEmail = getUserEmailFromRequest(req);
+
+            const db = getDB();
+            const classroom = await db.collection('classrooms').findOne({
+                _id: new ObjectId(classroomId)
+            });
+
+            if (!classroom) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Classroom not found'
+                });
+            }
+
+            if (!isInstructor({ email: userEmail }, classroom)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied. Only instructors can send reminders.'
+                });
+            }
+
+            const task = classroom.tasks?.assignments?.find(t =>
+                t._id?.toString() === taskId || t.id?.toString() === taskId
+            );
+
+            if (!task) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Task not found'
+                });
+            }
+
+            const submissions = task.submissions || [];
+            const submittedEmails = submissions.map(sub => sub.studentEmail);
+            const allStudents = classroom.students || [];
+            const pendingStudents = allStudents.filter(email => !submittedEmails.includes(email));
+
+            // Here you would integrate with your notification system
+            // For now, we'll just return the list of students to remind
+
+            res.json({
+                success: true,
+                message: `Found ${pendingStudents.length} students to remind`,
+                pendingStudents: pendingStudents,
+                taskTitle: task.title,
+                dueDate: task.dueDate
+            });
+
+        } catch (error) {
+            console.error('❌ Error sending submission reminders:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to send submission reminders',
                 error: error.message
             });
         }
     }
 };
+
+// Helper function to format time remaining
+function formatTimeRemaining(milliseconds) {
+    const days = Math.floor(milliseconds / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((milliseconds % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (days > 0) {
+        return `${days} day${days !== 1 ? 's' : ''}, ${hours} hour${hours !== 1 ? 's' : ''}`;
+    } else if (hours > 0) {
+        return `${hours} hour${hours !== 1 ? 's' : ''}, ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    } else {
+        return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    }
+}
 
 module.exports = tasksController;
