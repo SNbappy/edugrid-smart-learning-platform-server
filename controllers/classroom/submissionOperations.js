@@ -3,6 +3,110 @@ const { ObjectId } = require('mongodb');
 const { validateClassroomId, findClassroom, createSubmissionObject } = require('./taskHelpers');
 const { hasSubmissionAccess, isInstructor, getUserEmailFromRequest } = require('./submissionAccess');
 
+// Helper functions for file type detection
+const getFileTypeFromExtension = (extension) => {
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+    const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'];
+    const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
+
+    const ext = extension.toLowerCase();
+
+    if (imageExts.includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    if (videoExts.includes(ext)) return `video/${ext}`;
+    if (audioExts.includes(ext)) return `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
+    if (ext === 'pdf') return 'application/pdf';
+    if (['doc', 'docx'].includes(ext)) return 'application/msword';
+    if (ext === 'txt') return 'text/plain';
+
+    return 'application/octet-stream';
+};
+
+const getMimeTypeFromExtension = (extension) => {
+    return getFileTypeFromExtension(extension);
+};
+
+const createEnhancedSubmissionObject = (data) => {
+    const {
+        studentEmail,
+        studentName,
+        submissionText,
+        submissionUrl,
+        attachments = [],
+        text,
+        fileUrl,
+        fileName,
+        fileSize,
+        fileType
+    } = data;
+
+    const baseSubmission = {
+        id: new ObjectId(),
+        studentEmail,
+        studentName: studentName || studentEmail.split('@')[0],
+        submissionText: submissionText || text || '',
+        submissionUrl: submissionUrl || fileUrl || null,
+        submittedAt: new Date(),
+        status: 'submitted',
+        grade: null,
+        feedback: null,
+        gradedBy: null,
+        gradedAt: null,
+        version: 1
+    };
+
+    // Format attachments for viewing modal compatibility
+    let formattedAttachments = [];
+
+    // Handle new Cloudinary file upload format
+    if (fileUrl && fileName) {
+        const extension = fileName.split('.').pop()?.toLowerCase() || '';
+
+        formattedAttachments = [{
+            url: fileUrl,
+            name: fileName,
+            originalName: fileName,
+            type: getFileTypeFromExtension(extension),
+            size: fileSize || null,
+            mimeType: fileType || getMimeTypeFromExtension(extension)
+        }];
+    }
+    // Handle existing attachments format
+    else if (attachments && attachments.length > 0) {
+        formattedAttachments = attachments.map(att => ({
+            url: att.url,
+            name: att.name || att.originalName || 'Uploaded File',
+            originalName: att.originalName || att.name || 'Uploaded File',
+            type: att.type || att.mimeType || 'application/octet-stream',
+            size: att.size || null,
+            mimeType: att.mimeType || att.type || 'application/octet-stream'
+        }));
+    }
+    // Handle legacy submissionUrl without attachments
+    else if (baseSubmission.submissionUrl) {
+        // Try to extract filename from URL
+        const urlParts = baseSubmission.submissionUrl.split('/');
+        const fileNameFromUrl = urlParts[urlParts.length - 1];
+        const extension = fileNameFromUrl.split('.').pop()?.toLowerCase() || '';
+
+        formattedAttachments = [{
+            url: baseSubmission.submissionUrl,
+            name: fileNameFromUrl || 'Uploaded File',
+            originalName: fileNameFromUrl || 'Uploaded File',
+            type: getFileTypeFromExtension(extension),
+            size: null,
+            mimeType: getMimeTypeFromExtension(extension)
+        }];
+    }
+
+    // Add both attachments and files arrays for compatibility
+    if (formattedAttachments.length > 0) {
+        baseSubmission.attachments = formattedAttachments;
+        baseSubmission.files = formattedAttachments; // Duplicate for backward compatibility
+    }
+
+    return baseSubmission;
+};
+
 const submitTask = async (req, res) => {
     try {
         const classroomId = req.params.classroomId || req.params.id;
@@ -13,10 +117,23 @@ const submitTask = async (req, res) => {
             submissionText,
             submissionUrl,
             attachments = [],
-            isResubmission = false // Add this flag to detect resubmissions
+            isResubmission = false,
+            // New Cloudinary format fields
+            text,
+            fileUrl,
+            fileName,
+            fileSize,
+            fileType
         } = req.body;
 
-        console.log('📤 Submitting task:', { classroomId, taskId, studentEmail, isResubmission });
+        console.log('📤 Submitting task:', {
+            classroomId,
+            taskId,
+            studentEmail,
+            isResubmission,
+            hasCloudinaryFile: !!fileUrl,
+            fileName
+        });
 
         if (!studentEmail) {
             return res.status(400).json({
@@ -80,13 +197,25 @@ const submitTask = async (req, res) => {
             return await handleResubmission(req, res, db, classroomId, taskId, existingSubmission);
         }
 
-        // Handle new submission
-        const submission = createSubmissionObject({
+        // Handle new submission with enhanced object creation
+        const submission = createEnhancedSubmissionObject({
             studentEmail,
             studentName,
             submissionText,
             submissionUrl,
-            attachments
+            attachments,
+            text,
+            fileUrl,
+            fileName,
+            fileSize,
+            fileType
+        });
+
+        console.log('✅ Created enhanced submission:', {
+            submissionId: submission.id,
+            hasAttachments: !!submission.attachments?.length,
+            attachmentCount: submission.attachments?.length || 0,
+            hasFiles: !!submission.files?.length
         });
 
         // Add submission to the task (try both _id and id)
@@ -129,9 +258,10 @@ const submitTask = async (req, res) => {
             success: true,
             message: 'Task submitted successfully',
             submission: {
-                ...submission,
-                // Don't return sensitive data
-                attachments: submission.attachments?.length || 0
+                id: submission.id,
+                studentEmail: submission.studentEmail,
+                submittedAt: submission.submittedAt,
+                attachmentCount: submission.attachments?.length || 0
             }
         });
 
@@ -145,7 +275,7 @@ const submitTask = async (req, res) => {
     }
 };
 
-// New function to handle resubmissions
+// Enhanced resubmission handler
 const handleResubmission = async (req, res, db, classroomId, taskId, existingSubmission) => {
     try {
         const {
@@ -153,17 +283,37 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             studentName,
             submissionText,
             submissionUrl,
-            attachments = []
+            attachments = [],
+            text,
+            fileUrl,
+            fileName,
+            fileSize,
+            fileType
         } = req.body;
 
         console.log('🔄 Handling resubmission for:', studentEmail);
 
-        // Create updated submission object
+        // Create updated submission with enhanced formatting
+        const updatedData = {
+            studentEmail,
+            studentName,
+            submissionText,
+            submissionUrl,
+            attachments,
+            text,
+            fileUrl,
+            fileName,
+            fileSize,
+            fileType
+        };
+
+        const enhancedSubmission = createEnhancedSubmissionObject(updatedData);
+
+        // Create updated submission object preserving existing data
         const updatedSubmission = {
             ...existingSubmission,
-            submissionText: submissionText || existingSubmission.submissionText,
-            submissionUrl: submissionUrl || existingSubmission.submissionUrl,
-            attachments: attachments.length > 0 ? attachments : existingSubmission.attachments,
+            ...enhancedSubmission,
+            id: existingSubmission.id || existingSubmission._id, // Preserve original ID
             submittedAt: new Date(), // Update submission time
             status: 'resubmitted', // Mark as resubmitted
             version: (existingSubmission.version || 1) + 1, // Increment version
@@ -175,6 +325,13 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             gradedBy: null,
             gradedAt: null
         };
+
+        console.log('✅ Enhanced resubmission:', {
+            submissionId: updatedSubmission.id,
+            version: updatedSubmission.version,
+            hasAttachments: !!updatedSubmission.attachments?.length,
+            attachmentCount: updatedSubmission.attachments?.length || 0
+        });
 
         // Update the specific submission in the array
         let result = await db.collection('classrooms').updateOne(
@@ -233,8 +390,11 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             success: true,
             message: 'Task resubmitted successfully',
             submission: {
-                ...updatedSubmission,
-                attachments: updatedSubmission.attachments?.length || 0
+                id: updatedSubmission.id,
+                studentEmail: updatedSubmission.studentEmail,
+                submittedAt: updatedSubmission.submittedAt,
+                version: updatedSubmission.version,
+                attachmentCount: updatedSubmission.attachments?.length || 0
             }
         });
 
@@ -248,11 +408,9 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
     }
 };
 
-// New function specifically for resubmissions (can be called from PUT route)
 const resubmitTask = async (req, res) => {
     // Add isResubmission flag to request body
     req.body.isResubmission = true;
-
     // Call the main submitTask function
     return await submitTask(req, res);
 };
@@ -307,12 +465,62 @@ const getTaskSubmissions = async (req, res) => {
             submissions = task.submissions?.filter(sub => sub.studentEmail === userEmail) || [];
         }
 
+        // Enhance submissions for viewing modal compatibility
+        const enhancedSubmissions = submissions.map(submission => {
+            // Ensure backward compatibility for old submissions without proper file structure
+            let attachments = submission.attachments || [];
+            let files = submission.files || [];
+
+            // If no attachments but has submissionUrl, create attachment object
+            if ((!attachments || attachments.length === 0) && submission.submissionUrl) {
+                const urlParts = submission.submissionUrl.split('/');
+                const fileName = urlParts[urlParts.length - 1];
+                const extension = fileName.split('.').pop()?.toLowerCase() || '';
+
+                const fileAttachment = {
+                    url: submission.submissionUrl,
+                    name: fileName || 'Uploaded File',
+                    originalName: fileName || 'Uploaded File',
+                    type: getFileTypeFromExtension(extension),
+                    size: null,
+                    mimeType: getMimeTypeFromExtension(extension)
+                };
+
+                attachments = [fileAttachment];
+                files = [fileAttachment];
+            }
+
+            return {
+                ...submission,
+                _id: submission.id || submission._id, // Ensure _id exists
+                attachments,
+                files, // Duplicate for compatibility
+                // Ensure these fields exist
+                submissionText: submission.submissionText || '',
+                studentName: submission.studentName || submission.studentEmail?.split('@')[0] || 'Unknown',
+                submittedAt: submission.submittedAt || new Date(),
+                status: submission.status || 'submitted'
+            };
+        });
+
+        console.log('✅ Enhanced submissions for viewing:', {
+            count: enhancedSubmissions.length,
+            userRole: userIsInstructor ? 'teacher' : 'student',
+            submissionsWithAttachments: enhancedSubmissions.filter(s => s.attachments?.length > 0).length
+        });
+
         res.json({
             success: true,
-            submissions: submissions,
-            count: submissions.length,
+            submissions: enhancedSubmissions,
+            count: enhancedSubmissions.length,
             taskTitle: task.title,
-            userRole: userIsInstructor ? 'teacher' : 'student'
+            userRole: userIsInstructor ? 'teacher' : 'student',
+            debug: {
+                originalQuery: { classroomId, taskId },
+                foundCount: submissions.length,
+                userEmail: userEmail,
+                enhancedCount: enhancedSubmissions.length
+            }
         });
 
     } catch (error) {
@@ -372,9 +580,32 @@ const getSubmissionById = async (req, res) => {
             });
         }
 
+        // Enhance single submission
+        let attachments = submission.attachments || [];
+        if ((!attachments || attachments.length === 0) && submission.submissionUrl) {
+            const urlParts = submission.submissionUrl.split('/');
+            const fileName = urlParts[urlParts.length - 1];
+            const extension = fileName.split('.').pop()?.toLowerCase() || '';
+
+            attachments = [{
+                url: submission.submissionUrl,
+                name: fileName || 'Uploaded File',
+                originalName: fileName || 'Uploaded File',
+                type: getFileTypeFromExtension(extension),
+                size: null,
+                mimeType: getMimeTypeFromExtension(extension)
+            }];
+        }
+
+        const enhancedSubmission = {
+            ...submission,
+            attachments,
+            files: attachments // Duplicate for compatibility
+        };
+
         res.json({
             success: true,
-            submission: submission
+            submission: enhancedSubmission
         });
 
     } catch (error) {
@@ -413,7 +644,8 @@ const gradeSubmission = async (req, res) => {
             });
         }
 
-        const result = await db.collection('classrooms').updateOne(
+        // Try both possible submission ID formats
+        let result = await db.collection('classrooms').updateOne(
             {
                 _id: new ObjectId(classroomId),
                 'tasks.assignments._id': new ObjectId(taskId),
@@ -437,12 +669,41 @@ const gradeSubmission = async (req, res) => {
             }
         );
 
+        // Try alternative format if first attempt fails
+        if (result.matchedCount === 0) {
+            result = await db.collection('classrooms').updateOne(
+                {
+                    _id: new ObjectId(classroomId),
+                    'tasks.assignments._id': new ObjectId(taskId),
+                    'tasks.assignments.submissions._id': new ObjectId(submissionId)
+                },
+                {
+                    $set: {
+                        'tasks.assignments.$[task].submissions.$[submission].grade': grade,
+                        'tasks.assignments.$[task].submissions.$[submission].feedback': feedback || '',
+                        'tasks.assignments.$[task].submissions.$[submission].gradedBy': gradedBy || userEmail,
+                        'tasks.assignments.$[task].submissions.$[submission].gradedAt': new Date(),
+                        'tasks.assignments.$[task].submissions.$[submission].status': 'graded',
+                        updatedAt: new Date()
+                    }
+                },
+                {
+                    arrayFilters: [
+                        { 'task._id': new ObjectId(taskId) },
+                        { 'submission._id': new ObjectId(submissionId) }
+                    ]
+                }
+            );
+        }
+
         if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'Submission not found'
+                message: 'Submission not found or could not be updated'
             });
         }
+
+        console.log('✅ Submission graded successfully');
 
         res.json({
             success: true,
@@ -461,7 +722,7 @@ const gradeSubmission = async (req, res) => {
 
 module.exports = {
     submitTask,
-    resubmitTask, // Export new resubmit function
+    resubmitTask,
     getTaskSubmissions,
     getSubmissionById,
     gradeSubmission
