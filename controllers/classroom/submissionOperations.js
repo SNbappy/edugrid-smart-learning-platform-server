@@ -8,16 +8,16 @@ const getFileTypeFromExtension = (extension) => {
     const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
     const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'];
     const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
-
+    
     const ext = extension.toLowerCase();
-
+    
     if (imageExts.includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
     if (videoExts.includes(ext)) return `video/${ext}`;
     if (audioExts.includes(ext)) return `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
     if (ext === 'pdf') return 'application/pdf';
     if (['doc', 'docx'].includes(ext)) return 'application/msword';
     if (ext === 'txt') return 'text/plain';
-
+    
     return 'application/octet-stream';
 };
 
@@ -60,7 +60,7 @@ const createEnhancedSubmissionObject = (data) => {
     // Handle new Cloudinary file upload format
     if (fileUrl && fileName) {
         const extension = fileName.split('.').pop()?.toLowerCase() || '';
-
+        
         formattedAttachments = [{
             url: fileUrl,
             name: fileName,
@@ -87,7 +87,7 @@ const createEnhancedSubmissionObject = (data) => {
         const urlParts = baseSubmission.submissionUrl.split('/');
         const fileNameFromUrl = urlParts[urlParts.length - 1];
         const extension = fileNameFromUrl.split('.').pop()?.toLowerCase() || '';
-
+        
         formattedAttachments = [{
             url: baseSubmission.submissionUrl,
             name: fileNameFromUrl || 'Uploaded File',
@@ -172,12 +172,14 @@ const submitTask = async (req, res) => {
             });
         }
 
-        // Check if task is overdue
+        // Check if task is overdue (optional - you might want to allow late submissions)
         if (new Date() > new Date(task.dueDate)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot submit - assignment is overdue'
-            });
+            console.log('⚠️ Task is overdue but allowing submission/resubmission');
+            // You can choose to block this or allow it
+            // return res.status(400).json({
+            //     success: false,
+            //     message: 'Cannot submit - assignment is overdue'
+            // });
         }
 
         // Check if student already submitted
@@ -185,19 +187,13 @@ const submitTask = async (req, res) => {
             s.studentEmail === studentEmail
         );
 
-        if (existingSubmission && !isResubmission) {
-            return res.status(400).json({
-                success: false,
-                message: 'You have already submitted this task. Use resubmit option to update your submission.'
-            });
-        }
-
-        if (existingSubmission && isResubmission) {
-            // Handle resubmission - update existing submission
+        if (existingSubmission) {
+            // **ALWAYS REPLACE existing submission (no need for isResubmission flag)**
+            console.log('📝 Found existing submission - will replace it completely');
             return await handleResubmission(req, res, db, classroomId, taskId, existingSubmission);
         }
 
-        // Handle new submission with enhanced object creation
+        // Handle NEW submission (first time)
         const submission = createEnhancedSubmissionObject({
             studentEmail,
             studentName,
@@ -211,14 +207,13 @@ const submitTask = async (req, res) => {
             fileType
         });
 
-        console.log('✅ Created enhanced submission:', {
+        console.log('✅ Created NEW submission (first time):', {
             submissionId: submission.id,
             hasAttachments: !!submission.attachments?.length,
-            attachmentCount: submission.attachments?.length || 0,
-            hasFiles: !!submission.files?.length
+            attachmentCount: submission.attachments?.length || 0
         });
 
-        // Add submission to the task (try both _id and id)
+        // Add submission to the task
         let result = await db.collection('classrooms').updateOne(
             {
                 _id: new ObjectId(classroomId),
@@ -252,7 +247,7 @@ const submitTask = async (req, res) => {
             });
         }
 
-        console.log('✅ Task submitted successfully');
+        console.log('✅ NEW task submitted successfully');
 
         res.status(201).json({
             success: true,
@@ -275,6 +270,7 @@ const submitTask = async (req, res) => {
     }
 };
 
+
 // Enhanced resubmission handler
 const handleResubmission = async (req, res, db, classroomId, taskId, existingSubmission) => {
     try {
@@ -291,12 +287,12 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             fileType
         } = req.body;
 
-        console.log('🔄 Handling resubmission for:', studentEmail);
+        console.log('🔄 Replacing existing submission for:', studentEmail);
 
-        // Create updated submission with enhanced formatting
-        const updatedData = {
+        // Create completely NEW submission (replace old one entirely)
+        const newSubmission = createEnhancedSubmissionObject({
             studentEmail,
-            studentName,
+            studentName: studentName || existingSubmission.studentName,
             submissionText,
             submissionUrl,
             attachments,
@@ -305,35 +301,30 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             fileName,
             fileSize,
             fileType
-        };
+        });
 
-        const enhancedSubmission = createEnhancedSubmissionObject(updatedData);
-
-        // Create updated submission object preserving existing data
-        const updatedSubmission = {
-            ...existingSubmission,
-            ...enhancedSubmission,
-            id: existingSubmission.id || existingSubmission._id, // Preserve original ID
-            submittedAt: new Date(), // Update submission time
-            status: 'resubmitted', // Mark as resubmitted
-            version: (existingSubmission.version || 1) + 1, // Increment version
-            // Keep original submission data for audit trail
-            originalSubmissionDate: existingSubmission.submittedAt || existingSubmission.originalSubmissionDate,
-            // Reset grading info since it's a new submission
+        // Keep the original submission ID and some metadata
+        const replacementSubmission = {
+            ...newSubmission,
+            id: existingSubmission.id || existingSubmission._id, // Keep same ID
+            submittedAt: new Date(), // New submission time
+            status: 'submitted', // Reset to submitted (not resubmitted)
+            // Reset grading since it's a new submission
             grade: null,
             feedback: null,
             gradedBy: null,
-            gradedAt: null
+            gradedAt: null,
+            // Don't track versions - this is a complete replacement
+            version: 1
         };
 
-        console.log('✅ Enhanced resubmission:', {
-            submissionId: updatedSubmission.id,
-            version: updatedSubmission.version,
-            hasAttachments: !!updatedSubmission.attachments?.length,
-            attachmentCount: updatedSubmission.attachments?.length || 0
+        console.log('✅ Creating replacement submission:', {
+            submissionId: replacementSubmission.id,
+            studentEmail: replacementSubmission.studentEmail,
+            hasAttachments: !!replacementSubmission.attachments?.length
         });
 
-        // Update the specific submission in the array
+        // **COMPLETELY REPLACE the old submission** (not update - replace entirely)
         let result = await db.collection('classrooms').updateOne(
             {
                 _id: new ObjectId(classroomId),
@@ -342,7 +333,7 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
             },
             {
                 $set: {
-                    'tasks.assignments.$[task].submissions.$[submission]': updatedSubmission,
+                    'tasks.assignments.$[task].submissions.$[submission]': replacementSubmission,
                     updatedAt: new Date()
                 }
             },
@@ -364,7 +355,7 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
                 },
                 {
                     $set: {
-                        'tasks.assignments.$[task].submissions.$[submission]': updatedSubmission,
+                        'tasks.assignments.$[task].submissions.$[submission]': replacementSubmission,
                         updatedAt: new Date()
                     }
                 },
@@ -380,33 +371,33 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
         if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'Failed to update submission'
+                message: 'Failed to replace submission'
             });
         }
 
-        console.log('✅ Task resubmitted successfully');
+        console.log('✅ Submission completely replaced (old one overwritten)');
 
         res.status(200).json({
             success: true,
-            message: 'Task resubmitted successfully',
+            message: 'Task resubmitted successfully (previous submission replaced)',
             submission: {
-                id: updatedSubmission.id,
-                studentEmail: updatedSubmission.studentEmail,
-                submittedAt: updatedSubmission.submittedAt,
-                version: updatedSubmission.version,
-                attachmentCount: updatedSubmission.attachments?.length || 0
+                id: replacementSubmission.id,
+                studentEmail: replacementSubmission.studentEmail,
+                submittedAt: replacementSubmission.submittedAt,
+                attachmentCount: replacementSubmission.attachments?.length || 0
             }
         });
 
     } catch (error) {
-        console.error('❌ Error resubmitting task:', error);
+        console.error('❌ Error replacing submission:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to resubmit task',
+            message: 'Failed to replace submission',
             error: error.message
         });
     }
 };
+
 
 const resubmitTask = async (req, res) => {
     // Add isResubmission flag to request body
@@ -458,11 +449,13 @@ const getTaskSubmissions = async (req, res) => {
         let submissions = [];
 
         if (userIsInstructor) {
-            // Instructor can see all submissions
+            // **TEACHER VIEW: Show ALL submissions (now each student has only 1 submission max)**
             submissions = task.submissions || [];
+            console.log('👨‍🏫 TEACHER VIEW - All submissions (1 per student):', submissions.length);
         } else {
-            // Student can only see their own submission
+            // **STUDENT VIEW: Show only their own submission**
             submissions = task.submissions?.filter(sub => sub.studentEmail === userEmail) || [];
+            console.log('👤 STUDENT VIEW - Own submission only:', submissions.length);
         }
 
         // Enhance submissions for viewing modal compatibility
@@ -532,6 +525,7 @@ const getTaskSubmissions = async (req, res) => {
         });
     }
 };
+
 
 const getSubmissionById = async (req, res) => {
     try {
