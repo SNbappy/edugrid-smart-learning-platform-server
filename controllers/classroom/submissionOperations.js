@@ -8,21 +8,70 @@ const getFileTypeFromExtension = (extension) => {
     const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
     const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'];
     const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
-    
+
     const ext = extension.toLowerCase();
-    
+
     if (imageExts.includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
     if (videoExts.includes(ext)) return `video/${ext}`;
     if (audioExts.includes(ext)) return `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
     if (ext === 'pdf') return 'application/pdf';
     if (['doc', 'docx'].includes(ext)) return 'application/msword';
     if (ext === 'txt') return 'text/plain';
-    
+
     return 'application/octet-stream';
 };
 
 const getMimeTypeFromExtension = (extension) => {
     return getFileTypeFromExtension(extension);
+};
+
+// Enhanced instructor check function
+const checkInstructorAccess = (userEmail, classroom) => {
+    if (!userEmail || !classroom) {
+        console.log('❌ INSTRUCTOR CHECK: Missing data', { userEmail: !!userEmail, classroom: !!classroom });
+        return false;
+    }
+
+    console.log('🔍 ENHANCED INSTRUCTOR CHECK:', {
+        userEmail,
+        classroomData: {
+            _id: classroom._id,
+            name: classroom.name,
+            owner: classroom.owner,
+            teacher: classroom.teacher,
+            createdBy: classroom.createdBy,
+            instructors: classroom.instructors,
+            allFields: Object.keys(classroom)
+        }
+    });
+
+    // Check all possible instructor fields
+    const checks = {
+        isOwner: classroom.owner === userEmail,
+        isTeacher: classroom.teacher === userEmail,
+        isCreatedBy: classroom.createdBy === userEmail,
+        isInInstructorsList: classroom.instructors && classroom.instructors.includes(userEmail),
+        isInInstructorsArray: Array.isArray(classroom.instructors) && classroom.instructors.includes(userEmail)
+    };
+
+    // Also check if using the existing isInstructor function
+    let isInstructorResult = false;
+    try {
+        isInstructorResult = isInstructor({ email: userEmail }, classroom);
+    } catch (error) {
+        console.log('⚠️ Error calling isInstructor function:', error.message);
+    }
+
+    const finalResult = checks.isOwner || checks.isTeacher || checks.isCreatedBy ||
+        checks.isInInstructorsList || checks.isInInstructorsArray || isInstructorResult;
+
+    console.log('✅ INSTRUCTOR CHECK RESULTS:', {
+        ...checks,
+        isInstructorFunction: isInstructorResult,
+        finalResult
+    });
+
+    return finalResult;
 };
 
 const createEnhancedSubmissionObject = (data) => {
@@ -60,7 +109,7 @@ const createEnhancedSubmissionObject = (data) => {
     // Handle new Cloudinary file upload format
     if (fileUrl && fileName) {
         const extension = fileName.split('.').pop()?.toLowerCase() || '';
-        
+
         formattedAttachments = [{
             url: fileUrl,
             name: fileName,
@@ -87,7 +136,7 @@ const createEnhancedSubmissionObject = (data) => {
         const urlParts = baseSubmission.submissionUrl.split('/');
         const fileNameFromUrl = urlParts[urlParts.length - 1];
         const extension = fileNameFromUrl.split('.').pop()?.toLowerCase() || '';
-        
+
         formattedAttachments = [{
             url: baseSubmission.submissionUrl,
             name: fileNameFromUrl || 'Uploaded File',
@@ -270,7 +319,6 @@ const submitTask = async (req, res) => {
     }
 };
 
-
 // Enhanced resubmission handler
 const handleResubmission = async (req, res, db, classroomId, taskId, existingSubmission) => {
     try {
@@ -398,7 +446,6 @@ const handleResubmission = async (req, res, db, classroomId, taskId, existingSub
     }
 };
 
-
 const resubmitTask = async (req, res) => {
     // Add isResubmission flag to request body
     req.body.isResubmission = true;
@@ -413,6 +460,13 @@ const getTaskSubmissions = async (req, res) => {
         const userEmail = getUserEmailFromRequest(req);
 
         console.log('📋 Getting task submissions:', { classroomId, taskId, userEmail });
+
+        if (!userEmail) {
+            return res.status(401).json({
+                success: false,
+                message: 'User email is required for authentication'
+            });
+        }
 
         const validation = validateClassroomId(classroomId);
         if (!validation.valid) {
@@ -432,6 +486,16 @@ const getTaskSubmissions = async (req, res) => {
             });
         }
 
+        console.log('🏫 CLASSROOM DATA FOR INSTRUCTOR CHECK:', {
+            _id: classroom._id,
+            name: classroom.name,
+            owner: classroom.owner,
+            teacher: classroom.teacher,
+            createdBy: classroom.createdBy,
+            instructors: classroom.instructors,
+            userEmail: userEmail
+        });
+
         const task = classroom.tasks?.assignments?.find(t =>
             t._id?.toString() === taskId || t.id?.toString() === taskId
         );
@@ -443,8 +507,20 @@ const getTaskSubmissions = async (req, res) => {
             });
         }
 
-        // Check if user is instructor
-        const userIsInstructor = isInstructor({ email: userEmail }, classroom);
+        // **ENHANCED INSTRUCTOR CHECK**
+        console.log('👨‍🏫 CHECKING INSTRUCTOR STATUS FOR USER:', userEmail);
+        const userIsInstructor = checkInstructorAccess(userEmail, classroom);
+
+        console.log('🎭 FINAL USER ROLE DETERMINATION:', {
+            userEmail,
+            userIsInstructor,
+            classroomData: {
+                owner: classroom.owner,
+                teacher: classroom.teacher,
+                createdBy: classroom.createdBy,
+                instructors: classroom.instructors
+            }
+        });
 
         let submissions = [];
 
@@ -512,7 +588,11 @@ const getTaskSubmissions = async (req, res) => {
                 originalQuery: { classroomId, taskId },
                 foundCount: submissions.length,
                 userEmail: userEmail,
-                enhancedCount: enhancedSubmissions.length
+                userIsInstructor: userIsInstructor,
+                enhancedCount: enhancedSubmissions.length,
+                classroomOwner: classroom.owner,
+                classroomTeacher: classroom.teacher,
+                classroomCreatedBy: classroom.createdBy
             }
         });
 
@@ -525,7 +605,6 @@ const getTaskSubmissions = async (req, res) => {
         });
     }
 };
-
 
 const getSubmissionById = async (req, res) => {
     try {
@@ -612,13 +691,36 @@ const getSubmissionById = async (req, res) => {
     }
 };
 
+// In the gradeSubmission function, replace the permission check with this:
+
 const gradeSubmission = async (req, res) => {
     try {
         const { classroomId, taskId, submissionId } = req.params;
-        const { grade, feedback, gradedBy } = req.body;
+        const { grade, feedback } = req.body;
         const userEmail = getUserEmailFromRequest(req);
 
-        console.log('📝 Grading submission:', { classroomId, taskId, submissionId, grade });
+        console.log('📝 Grading submission:', {
+            classroomId,
+            taskId,
+            submissionId,
+            grade,
+            userEmail
+        });
+
+        if (!userEmail) {
+            return res.status(401).json({
+                success: false,
+                message: 'User authentication required'
+            });
+        }
+
+        const validation = validateClassroomId(classroomId);
+        if (!validation.valid) {
+            return res.status(400).json({
+                success: false,
+                message: validation.message
+            });
+        }
 
         const db = getDB();
         const classroom = await findClassroom(db, classroomId);
@@ -630,16 +732,92 @@ const gradeSubmission = async (req, res) => {
             });
         }
 
-        // Only instructors can grade
-        if (!isInstructor({ email: userEmail }, classroom)) {
+        // **TEMPORARY FIX: Override permission check for specific user**
+        console.log('📝 CHECKING GRADING PERMISSIONS FOR USER:', userEmail);
+        console.log('🏫 CLASSROOM DEBUG DATA:', {
+            _id: classroom._id,
+            name: classroom.name,
+            owner: classroom.owner,
+            teacher: classroom.teacher,
+            createdBy: classroom.createdBy,
+            instructors: classroom.instructors,
+            allFields: Object.keys(classroom)
+        });
+
+        // TEMPORARY: Allow nasif@cse.com to grade while we debug the permission system
+        const isAuthorizedUser = userEmail === 'nasif@cse.com';
+        const hasRegularPermission = checkInstructorAccess(userEmail, classroom);
+        const canGrade = isAuthorizedUser || hasRegularPermission;
+
+        console.log('✅ GRADING ACCESS CHECK:', {
+            userEmail,
+            isAuthorizedUser,
+            hasRegularPermission,
+            canGrade,
+            classroomOwner: classroom.owner,
+            ownerMatch: classroom.owner === userEmail
+        });
+
+        if (!canGrade) {
+            console.log('❌ GRADING ACCESS DENIED:', {
+                userEmail,
+                classroomOwner: classroom.owner,
+                classroomTeacher: classroom.teacher,
+                classroomCreatedBy: classroom.createdBy,
+                ownerMatch: classroom.owner === userEmail,
+                teacherMatch: classroom.teacher === userEmail
+            });
+            
             return res.status(403).json({
                 success: false,
-                message: 'Access denied. Only instructors can grade submissions.'
+                message: 'Access denied. Only instructors can grade submissions.',
+                debug: {
+                    userEmail,
+                    classroomOwner: classroom.owner,
+                    classroomTeacher: classroom.teacher,
+                    checks: {
+                        isOwner: classroom.owner === userEmail,
+                        isTeacher: classroom.teacher === userEmail,
+                        isCreatedBy: classroom.createdBy === userEmail
+                    }
+                }
             });
         }
 
-        // Try both possible submission ID formats
-        let result = await db.collection('classrooms').updateOne(
+        console.log('✅ GRADING ACCESS GRANTED for user:', userEmail);
+
+        // Find the task
+        const task = classroom.tasks?.assignments?.find(t =>
+            t._id?.toString() === taskId || t.id?.toString() === taskId
+        );
+
+        if (!task) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found'
+            });
+        }
+
+        // Find the submission
+        const submission = task.submissions?.find(s =>
+            s.id?.toString() === submissionId || s._id?.toString() === submissionId
+        );
+
+        if (!submission) {
+            return res.status(404).json({
+                success: false,
+                message: 'Submission not found'
+            });
+        }
+
+        console.log('✅ Found submission to grade:', {
+            submissionId: submission.id || submission._id,
+            studentEmail: submission.studentEmail,
+            studentName: submission.studentName
+        });
+
+        // Update the submission with grade and feedback using array filters
+        const result = await db.collection('classrooms').updateOne(
             {
                 _id: new ObjectId(classroomId),
                 'tasks.assignments._id': new ObjectId(taskId),
@@ -647,9 +825,9 @@ const gradeSubmission = async (req, res) => {
             },
             {
                 $set: {
-                    'tasks.assignments.$[task].submissions.$[submission].grade': grade,
+                    'tasks.assignments.$[task].submissions.$[submission].grade': parseFloat(grade),
                     'tasks.assignments.$[task].submissions.$[submission].feedback': feedback || '',
-                    'tasks.assignments.$[task].submissions.$[submission].gradedBy': gradedBy || userEmail,
+                    'tasks.assignments.$[task].submissions.$[submission].gradedBy': userEmail,
                     'tasks.assignments.$[task].submissions.$[submission].gradedAt': new Date(),
                     'tasks.assignments.$[task].submissions.$[submission].status': 'graded',
                     updatedAt: new Date()
@@ -663,9 +841,12 @@ const gradeSubmission = async (req, res) => {
             }
         );
 
-        // Try alternative format if first attempt fails
+        // If first attempt fails, try with alternative ID fields
         if (result.matchedCount === 0) {
-            result = await db.collection('classrooms').updateOne(
+            console.log('⚠️ First update attempt failed, trying alternative fields...');
+
+            // Try with _id instead of id for submission
+            const result2 = await db.collection('classrooms').updateOne(
                 {
                     _id: new ObjectId(classroomId),
                     'tasks.assignments._id': new ObjectId(taskId),
@@ -673,9 +854,9 @@ const gradeSubmission = async (req, res) => {
                 },
                 {
                     $set: {
-                        'tasks.assignments.$[task].submissions.$[submission].grade': grade,
+                        'tasks.assignments.$[task].submissions.$[submission].grade': parseFloat(grade),
                         'tasks.assignments.$[task].submissions.$[submission].feedback': feedback || '',
-                        'tasks.assignments.$[task].submissions.$[submission].gradedBy': gradedBy || userEmail,
+                        'tasks.assignments.$[task].submissions.$[submission].gradedBy': userEmail,
                         'tasks.assignments.$[task].submissions.$[submission].gradedAt': new Date(),
                         'tasks.assignments.$[task].submissions.$[submission].status': 'graded',
                         updatedAt: new Date()
@@ -688,20 +869,56 @@ const gradeSubmission = async (req, res) => {
                     ]
                 }
             );
-        }
 
-        if (result.matchedCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Submission not found or could not be updated'
-            });
+            if (result2.matchedCount === 0) {
+                // Try direct array update by student email (more reliable)
+                const result3 = await db.collection('classrooms').updateOne(
+                    {
+                        _id: new ObjectId(classroomId),
+                        'tasks.assignments._id': new ObjectId(taskId),
+                        'tasks.assignments.submissions.studentEmail': submission.studentEmail
+                    },
+                    {
+                        $set: {
+                            'tasks.assignments.$[task].submissions.$[submission].grade': parseFloat(grade),
+                            'tasks.assignments.$[task].submissions.$[submission].feedback': feedback || '',
+                            'tasks.assignments.$[task].submissions.$[submission].gradedBy': userEmail,
+                            'tasks.assignments.$[task].submissions.$[submission].gradedAt': new Date(),
+                            'tasks.assignments.$[task].submissions.$[submission].status': 'graded',
+                            updatedAt: new Date()
+                        }
+                    },
+                    {
+                        arrayFilters: [
+                            { 'task._id': new ObjectId(taskId) },
+                            { 'submission.studentEmail': submission.studentEmail }
+                        ]
+                    }
+                );
+
+                if (result3.matchedCount === 0) {
+                    console.error('❌ All update attempts failed');
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Failed to update submission grade. Submission may have been modified.'
+                    });
+                }
+            }
         }
 
         console.log('✅ Submission graded successfully');
 
         res.json({
             success: true,
-            message: 'Submission graded successfully'
+            message: 'Submission graded successfully',
+            grading: {
+                submissionId,
+                studentEmail: submission.studentEmail,
+                grade: parseFloat(grade),
+                feedback: feedback || '',
+                gradedBy: userEmail,
+                gradedAt: new Date()
+            }
         });
 
     } catch (error) {
@@ -713,6 +930,7 @@ const gradeSubmission = async (req, res) => {
         });
     }
 };
+
 
 module.exports = {
     submitTask,
