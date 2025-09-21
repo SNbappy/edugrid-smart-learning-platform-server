@@ -33,6 +33,7 @@ const userController = {
                 name: name,
                 email: email,
                 photoURL: '',  // Keep blank for now
+                coverPhotoURL: '', // Add cover photo field
                 loginMethod: loginMethod || 'email_password',
                 role: 'user',  // ✅ Changed from 'teacher' to 'user'
                 createdAt: new Date(),
@@ -71,7 +72,7 @@ const userController = {
         }
     },
 
-    // Update User Profile - Remove role from updateable fields
+    // Update User Profile - FIXED to include coverPhotoURL
     updateUserProfile: async (req, res) => {
         try {
             const email = req.params.email;
@@ -91,6 +92,7 @@ const userController = {
             if (updateData.name) rootFields.name = updateData.name;
             if (updateData.email) rootFields.email = updateData.email;
             if (updateData.photoURL !== undefined) rootFields.photoURL = updateData.photoURL;
+            if (updateData.coverPhotoURL !== undefined) rootFields.coverPhotoURL = updateData.coverPhotoURL; // ✅ FIXED: Added this line
 
             // Profile fields
             if (updateData.bio !== undefined) profileFields['profile.bio'] = updateData.bio;
@@ -144,7 +146,7 @@ const userController = {
         }
     },
 
-    // ... rest of your methods remain the same
+    // Get User By Email - Updated to include coverPhotoURL migration
     getUserByEmail: async (req, res) => {
         try {
             const email = req.params.email;
@@ -163,21 +165,35 @@ const userController = {
             }
 
             // Migrate old schema if needed
+            let needsMigration = false;
+            const updates = {};
+
+            // Check for missing profile fields
             if (!user.profile.hasOwnProperty('district') || !user.profile.hasOwnProperty('city')) {
-                console.log('🔄 Migrating user schema for:', email);
+                console.log('🔄 Migrating profile schema for:', email);
+                updates['profile.district'] = user.profile.district || '';
+                updates['profile.city'] = user.profile.city || '';
+                needsMigration = true;
+            }
 
-                const migratedProfile = {
-                    ...user.profile,
-                    district: user.profile.district || '',
-                    city: user.profile.city || ''
-                };
+            // Check for missing coverPhotoURL field
+            if (!user.hasOwnProperty('coverPhotoURL')) {
+                console.log('🔄 Adding coverPhotoURL field for:', email);
+                updates['coverPhotoURL'] = '';
+                needsMigration = true;
+            }
 
+            // Apply migrations if needed
+            if (needsMigration) {
                 await usersCollection.updateOne(
                     { email: email },
-                    { $set: { profile: migratedProfile } }
+                    { $set: updates }
                 );
 
-                user.profile = migratedProfile;
+                // Update the user object
+                if (updates['profile.district'] !== undefined) user.profile.district = updates['profile.district'];
+                if (updates['profile.city'] !== undefined) user.profile.city = updates['profile.city'];
+                if (updates['coverPhotoURL'] !== undefined) user.coverPhotoURL = updates['coverPhotoURL'];
             }
 
             console.log('✅ User found:', email);
