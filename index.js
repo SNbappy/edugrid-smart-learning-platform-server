@@ -31,46 +31,50 @@ const sendVerificationEmail = async (email, code, userName) => {
     const mailOptions = {
         from: `"EduGrid" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: 'OTP for EduGrid - Smart Learning Platform Login',
+        subject: 'OTP for EduGrid',
         html: `
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; }
-                    .email-wrapper { padding: 15px; }
+                    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                    table { border-collapse: collapse; }
                     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-                    .logo { padding: 15px 20px; text-align: left; background-color: #f8f9fa; }
-                    .logo-text { font-size: 18px; font-weight: 600; color: #1a202c; }
-                    .date { float: right; font-size: 12px; color: #718096; margin-top: 2px; }
-                    .content { padding: 25px 30px; }
-                    .title { font-size: 26px; font-weight: 700; color: #1a365d; text-align: center; margin-bottom: 20px; }
-                    .greeting { font-size: 14px; color: #2d3748; margin-bottom: 12px; }
-                    .greeting strong { font-weight: 600; }
-                    .message { font-size: 14px; color: #4a5568; line-height: 1.5; margin-bottom: 20px; }
-                    .code-box { background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; }
-                    .code { font-size: 38px; font-weight: 700; color: #2d3748; letter-spacing: 10px; font-family: 'Courier New', monospace; }
-                    .note { font-size: 13px; color: #718096; margin: 15px 0; line-height: 1.5; }
-                    .thank-you { font-size: 14px; color: #2d3748; margin-top: 20px; }
-                    .footer { background-color: #f8f9fa; padding: 20px 30px; border-top: 1px solid #e2e8f0; }
-                    .signature { font-size: 13px; color: #2d3748; margin-bottom: 15px; line-height: 1.5; }
-                    .social-links { text-align: center; margin: 15px 0; }
-                    .social-links a { display: inline-block; margin: 0 8px; }
-                    .social-links img { width: 28px; height: 28px; vertical-align: middle; }
-                    .social-links span { font-size: 13px; color: #457B9D; text-decoration: none; }
-                    .contact-info { text-align: center; font-size: 11px; color: #718096; margin: 12px 0 0 0; line-height: 1.5; }
+                    .logo-text { font-size: 16px; font-weight: 600; color: #1a202c; }
+                    .date { font-size: 11px; color: #718096; text-align: right; }
+                    .title { font-size: 24px; font-weight: 700; color: #1a365d; text-align: center; margin: 0 0 15px 0; }
+                    .greeting { font-size: 14px; color: #2d3748; margin-bottom: 10px; }
+                    .message { font-size: 14px; color: #4a5568; line-height: 1.5; margin-bottom: 15px; }
+                    .code-box { background-color: #ffffff; border: 2px solid #e2e8f0; border-radius: 6px; padding: 15px; text-align: center; margin: 15px 0; }
+                    .code { font-size: 34px; font-weight: 700; color: #2d3748; letter-spacing: 8px; font-family: 'Courier New', monospace; }
+                    .note { font-size: 13px; color: #718096; margin: 12px 0; line-height: 1.4; }
+                    .signature { font-size: 13px; color: #2d3748; margin-bottom: 12px; line-height: 1.4; }
+                    .contact-info { text-align: center; font-size: 11px; color: #718096; margin: 8px 0 0 0; }
                     .contact-info a { color: #457B9D; text-decoration: none; }
                 </style>
             </head>
             <body>
-                <div class="email-wrapper">
-                    <div class="container">
-                        <div class="logo">
-                            <span class="logo-text">🎓 EduGrid</span>
-                            <span class="date">${new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                        </div>
-                        
-                        <div class="content">
+                <table class="container" width="600" cellpadding="0" cellspacing="0">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 12px 20px; background-color: #f8f9fa;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="text-align: left;">
+                                        <img src="https://i.ibb.co/nqYcPpZG/photo-2025-07-25-14-57-55.jpg" alt="EduGrid" style="height: 18px; width: auto; vertical-align: middle; display: inline-block;">
+                                        <span class="logo-text" style="vertical-align: middle; margin-left: 6px;">EduGrid</span>
+                                    </td>
+                                    <td class="date" style="text-align: right; vertical-align: middle;">
+                                        ${new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 25px 25px;">
                             <h1 class="title">Your One-Time Password</h1>
                             
                             <div class="greeting">
@@ -78,7 +82,7 @@ const sendVerificationEmail = async (email, code, userName) => {
                             </div>
                             
                             <div class="message">
-                                Here is your One-Time Password to securely complete your registration on EduGrid:
+                                Here is your OTP to complete your EduGrid registration:
                             </div>
                             
                             <div class="code-box">
@@ -86,44 +90,42 @@ const sendVerificationEmail = async (email, code, userName) => {
                             </div>
                             
                             <div class="note">
-                                <strong>Note:</strong> This OTP is valid for 5 minutes.
+                                <strong>Note:</strong> Valid for 5 minutes.
                             </div>
                             
                             <div class="note">
-                                If you did not request this OTP, please disregard this email or contact our support team.
+                                If you didn't request this, please ignore this email.
                             </div>
-                            
-                            <div class="thank-you">
-                                Thank you for choosing EduGrid!
-                            </div>
-                        </div>
-                        
-                        <div class="footer">
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 15px 25px; background-color: #f8f9fa; border-top: 1px solid #e2e8f0;">
                             <div class="signature">
-                                Best regards,<br>
                                 <strong>Md. Sabbir Hossain Bappy</strong><br>
                                 Full Stack Developer | Creator of EduGrid
                             </div>
                             
-                            <div class="social-links">
-                                <a href="https://www.linkedin.com/in/snbappy" target="_blank" title="LinkedIn">
-                                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png" alt="LinkedIn">
+                            <div style="text-align: center; margin: 10px 0;">
+                                <a href="https://www.linkedin.com/in/snbappy" target="_blank" style="margin: 0 6px;">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png" alt="LinkedIn" style="width: 22px; height: 22px; vertical-align: middle;">
                                 </a>
-                                <a href="https://github.com/SNbappy" target="_blank" title="GitHub">
-                                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub">
+                                <a href="https://github.com/SNbappy" target="_blank" style="margin: 0 6px;">
+                                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" style="width: 22px; height: 22px; vertical-align: middle;">
                                 </a>
-                                <a href="https://codeforces.com/profile/Depressed_C0der" target="_blank" title="Codeforces">
-                                    <span>🏆 Codeforces</span>
+                                <a href="https://codeforces.com/profile/Depressed_C0der" target="_blank" style="font-size: 12px; color: #457B9D; text-decoration: none; margin: 0 6px;">
+                                    🏆 CF
                                 </a>
                             </div>
                             
                             <div class="contact-info">
-                                Website: <a href="https://edugrid-smart-learning.web.app/">edugrid-smart-learning.web.app</a><br>
-                                © 2025 EduGrid - Smart Learning Platform
+                                <a href="https://edugrid-smart-learning.web.app/">edugrid-smart-learning.web.app</a><br>
+                                © 2025 EduGrid
                             </div>
-                        </div>
-                    </div>
-                </div>
+                        </td>
+                    </tr>
+                </table>
             </body>
             </html>
         `
@@ -131,6 +133,7 @@ const sendVerificationEmail = async (email, code, userName) => {
 
     return transporter.sendMail(mailOptions);
 };
+
 
 /* ---------- ADD SUBMISSION ROUTE BEFORE OTHER ROUTES ---------- */
 app.get('/api/classrooms/:classroomId/tasks/:taskId/submissions', async (req, res) => {
