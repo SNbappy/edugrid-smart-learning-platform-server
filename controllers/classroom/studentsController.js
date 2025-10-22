@@ -6,7 +6,7 @@ const studentsController = {
     getClassroomStudents: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('👥 Getting students for classroom:', classroomId);
+            //console.log('👥 Getting students for classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -57,7 +57,7 @@ const studentsController = {
             const classroomId = req.params.id;
             const { studentEmail, reason } = req.body;
 
-            console.log('➖ Removing student from classroom:', { classroomId, studentEmail });
+            //console.log('➖ Removing student from classroom:', { classroomId, studentEmail });
 
             if (!studentEmail) {
                 return res.status(400).json({
@@ -116,7 +116,7 @@ const studentsController = {
                 });
             }
 
-            console.log('✅ Student removed successfully');
+            //console.log('✅ Student removed successfully');
 
             res.json({
                 success: true,
@@ -138,7 +138,7 @@ const studentsController = {
             const classroomId = req.params.id;
             const { studentEmail, studentName } = req.body;
 
-            console.log('➕ Adding student to classroom:', { classroomId, studentEmail });
+            //console.log('➕ Adding student to classroom:', { classroomId, studentEmail });
 
             if (!studentEmail || !studentName) {
                 return res.status(400).json({
@@ -207,7 +207,7 @@ const studentsController = {
                 });
             }
 
-            console.log('✅ Student added successfully');
+            //console.log('✅ Student added successfully');
 
             res.json({
                 success: true,
@@ -228,7 +228,7 @@ const studentsController = {
     getStudentInfo: async (req, res) => {
         try {
             const { id: classroomId, studentEmail } = req.params;
-            console.log('🔍 Getting student info:', { classroomId, studentEmail });
+            //console.log('🔍 Getting student info:', { classroomId, studentEmail });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -321,7 +321,7 @@ const studentsController = {
             const { id: classroomId, studentEmail } = req.params;
             const { status } = req.body;
 
-            console.log('📝 Updating student status:', { classroomId, studentEmail, status });
+            //console.log('📝 Updating student status:', { classroomId, studentEmail, status });
 
             const validStatuses = ['active', 'inactive', 'suspended'];
             if (!validStatuses.includes(status)) {

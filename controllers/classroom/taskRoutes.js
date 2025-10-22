@@ -10,13 +10,13 @@ const tasksController = require('../classroom/tasksController');
 
 // Request logging middleware for debugging
 router.use((req, res, next) => {
-    console.log(`📋 TASK ROUTE: ${req.method} ${req.path}`);
-    console.log(`📋 PARAMS:`, req.params);
-    console.log(`📋 HEADERS:`, {
-        authorization: req.headers.authorization ? 'present' : 'missing',
-        userEmail: req.headers['user-email']
-    });
-    next();
+    //console.log(`📋 TASK ROUTE: ${req.method} ${req.path}`);
+    //console.log(`📋 PARAMS:`, req.params);
+//     console.log(`📋 HEADERS:`, {
+//     authorization: req.headers.authorization ? 'present' : 'missing',
+//         userEmail: req.headers['user-email']
+// });
+next();
 });
 
 // ==================== TASK CRUD ROUTES ====================
@@ -44,139 +44,139 @@ router.get('/classrooms/:classroomId/tasks/:taskId/submissions', async (req, res
         const { classroomId, taskId } = req.params;
         const userEmail = req.headers['user-email'] || req.user?.email;
 
-        console.log('📋 GET SUBMISSIONS - START:', {
-            classroomId,
-            taskId,
-            userEmail
-        });
+        //console.log('📋 GET SUBMISSIONS - START:', {
+    //     classroomId,
+    //         taskId,
+    //         userEmail
+    // });
 
-        if (!userEmail) {
-            return res.status(401).json({
-                success: false,
-                message: 'User email is required',
-                debug: { headers: req.headers }
-            });
+if (!userEmail) {
+    return res.status(401).json({
+        success: false,
+        message: 'User email is required',
+        debug: { headers: req.headers }
+    });
+}
+
+// Validate classroomId
+if (!ObjectId.isValid(classroomId)) {
+    return res.status(400).json({
+        success: false,
+        message: 'Invalid classroom ID'
+    });
+}
+
+// Validate taskId
+if (!ObjectId.isValid(taskId)) {
+    return res.status(400).json({
+        success: false,
+        message: 'Invalid task ID'
+    });
+}
+
+const db = getDB();
+const classroom = await db.collection('classrooms').findOne({
+    _id: new ObjectId(classroomId)
+});
+
+if (!classroom) {
+    //console.log('❌ CLASSROOM NOT FOUND:', classroomId);
+    return res.status(404).json({
+        success: false,
+        message: 'Classroom not found'
+    });
+}
+
+//console.log('✅ CLASSROOM FOUND:', {
+// name: classroom.name,
+//     teacherEmail: classroom.teacherEmail,
+//         tasksCount: classroom.tasks?.assignments?.length || 0
+//         });
+
+// Find the specific task
+const task = classroom.tasks?.assignments?.find(t =>
+    t._id?.toString() === taskId || t.id?.toString() === taskId
+);
+
+if (!task) {
+    //console.log('❌ TASK NOT FOUND:', {
+//     taskId,
+//         availableTasks: classroom.tasks?.assignments?.map(t => ({
+//             id: t._id || t.id,
+//             title: t.title
+//         })) || []
+// });
+return res.status(404).json({
+    success: false,
+    message: 'Task not found'
+});
         }
 
-        // Validate classroomId
-        if (!ObjectId.isValid(classroomId)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid classroom ID'
-            });
-        }
+//console.log('✅ TASK FOUND:', {
+// title: task.title,
+//     submissionsCount: task.submissions?.length || 0
+//         });
 
-        // Validate taskId
-        if (!ObjectId.isValid(taskId)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid task ID'
-            });
-        }
+const submissions = task.submissions || [];
 
-        const db = getDB();
-        const classroom = await db.collection('classrooms').findOne({
-            _id: new ObjectId(classroomId)
-        });
+// Determine user role
+const isTeacher = classroom.teacherEmail === userEmail ||
+    classroom.createdBy === userEmail ||
+    (classroom.teachers && classroom.teachers.includes(userEmail));
 
-        if (!classroom) {
-            console.log('❌ CLASSROOM NOT FOUND:', classroomId);
-            return res.status(404).json({
-                success: false,
-                message: 'Classroom not found'
-            });
-        }
+//console.log('👤 USER ROLE CHECK:', {
+// userEmail,
+//     isTeacher,
+//     classroomTeacher: classroom.teacherEmail,
+//         classroomCreator: classroom.createdBy
+//         });
 
-        console.log('✅ CLASSROOM FOUND:', {
-            name: classroom.name,
-            teacherEmail: classroom.teacherEmail,
-            tasksCount: classroom.tasks?.assignments?.length || 0
-        });
-
-        // Find the specific task
-        const task = classroom.tasks?.assignments?.find(t =>
-            t._id?.toString() === taskId || t.id?.toString() === taskId
-        );
-
-        if (!task) {
-            console.log('❌ TASK NOT FOUND:', {
-                taskId,
-                availableTasks: classroom.tasks?.assignments?.map(t => ({
-                    id: t._id || t.id,
-                    title: t.title
-                })) || []
-            });
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found'
-            });
-        }
-
-        console.log('✅ TASK FOUND:', {
-            title: task.title,
-            submissionsCount: task.submissions?.length || 0
-        });
-
-        const submissions = task.submissions || [];
-
-        // Determine user role
-        const isTeacher = classroom.teacherEmail === userEmail ||
-            classroom.createdBy === userEmail ||
-            (classroom.teachers && classroom.teachers.includes(userEmail));
-
-        console.log('👤 USER ROLE CHECK:', {
-            userEmail,
-            isTeacher,
-            classroomTeacher: classroom.teacherEmail,
-            classroomCreator: classroom.createdBy
-        });
-
-        // Filter submissions based on user role
-        let filteredSubmissions = submissions;
-        if (!isTeacher) {
-            // Students can only see their own submissions
-            filteredSubmissions = submissions.filter(sub => sub.studentEmail === userEmail);
-            console.log('👤 STUDENT FILTER APPLIED:', {
-                originalCount: submissions.length,
-                filteredCount: filteredSubmissions.length
-            });
+// Filter submissions based on user role
+let filteredSubmissions = submissions;
+if (!isTeacher) {
+    // Students can only see their own submissions
+    filteredSubmissions = submissions.filter(sub => sub.studentEmail === userEmail);
+    //console.log('👤 STUDENT FILTER APPLIED:', {
+//     originalCount: submissions.length,
+//         filteredCount: filteredSubmissions.length
+// });
         } else {
-            console.log('👨‍🏫 TEACHER ACCESS - ALL SUBMISSIONS');
-        }
+    //console.log('👨‍🏫 TEACHER ACCESS - ALL SUBMISSIONS');
+}
 
-        console.log('✅ RETURNING SUBMISSIONS:', {
-            total: filteredSubmissions.length,
-            userRole: isTeacher ? 'teacher' : 'student'
-        });
+//console.log('✅ RETURNING SUBMISSIONS:', {
+// total: filteredSubmissions.length,
+//     userRole: isTeacher ? 'teacher' : 'student'
+//         });
 
-        res.json({
-            success: true,
-            submissions: filteredSubmissions,
-            count: filteredSubmissions.length,
-            taskTitle: task.title,
-            userRole: isTeacher ? 'teacher' : 'student',
-            debug: {
-                classroomId,
-                taskId,
-                userEmail,
-                isTeacher,
-                totalSubmissions: submissions.length,
-                filteredSubmissions: filteredSubmissions.length
-            }
-        });
+res.json({
+    success: true,
+    submissions: filteredSubmissions,
+    count: filteredSubmissions.length,
+    taskTitle: task.title,
+    userRole: isTeacher ? 'teacher' : 'student',
+    debug: {
+        classroomId,
+        taskId,
+        userEmail,
+        isTeacher,
+        totalSubmissions: submissions.length,
+        filteredSubmissions: filteredSubmissions.length
+    }
+});
 
     } catch (error) {
-        console.error('❌ GET SUBMISSIONS ERROR:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get submissions',
-            error: error.message,
-            debug: {
-                params: req.params,
-                userEmail: req.headers['user-email']
-            }
-        });
-    }
+    console.error('❌ GET SUBMISSIONS ERROR:', error);
+    res.status(500).json({
+        success: false,
+        message: 'Failed to get submissions',
+        error: error.message,
+        debug: {
+            params: req.params,
+            userEmail: req.headers['user-email']
+        }
+    });
+}
 });
 
 // Submit a task

@@ -141,11 +141,11 @@ app.get('/api/classrooms/:classroomId/tasks/:taskId/submissions', async (req, re
         const { classroomId, taskId } = req.params;
         const userEmail = req.headers['user-email'];
 
-        console.log('📋 SUBMISSIONS ROUTE HIT FROM INDEX.JS:', {
-            classroomId,
-            taskId,
-            userEmail
-        });
+        // //console.log('📋 SUBMISSIONS ROUTE HIT FROM INDEX.JS:', {
+        //     classroomId,
+        //     taskId,
+        //     userEmail
+        // });
 
         if (!userEmail) {
             return res.status(401).json({
@@ -202,7 +202,7 @@ app.get('/api/classrooms/:classroomId/tasks/:taskId/submissions', async (req, re
             filteredSubmissions = submissions.filter(sub => sub.studentEmail === userEmail);
         }
 
-        console.log('✅ RETURNING SUBMISSIONS:', filteredSubmissions.length);
+        // //console.log('✅ RETURNING SUBMISSIONS:', filteredSubmissions.length);
 
         res.json({
             success: true,
@@ -257,7 +257,7 @@ app.post('/api/send-verification-code', async (req, res) => {
 
         try {
             await sendVerificationEmail(email, verificationCode, name);
-            console.log(`✅ Email sent to ${email} (${name}) with code: ${verificationCode}`);
+            // //console.log(`✅ Email sent to ${email} (${name}) with code: ${verificationCode}`);
         } catch (emailError) {
             console.error('❌ Email failed:', emailError.message);
         }
@@ -282,7 +282,7 @@ app.post('/api/verify-code', async (req, res) => {
             });
         }
 
-        console.log('🔍 Verifying code for:', email, 'Code:', code);
+        // //console.log('🔍 Verifying code for:', email, 'Code:', code);
 
         const { getDB } = require('./database');
         const db = getDB();
@@ -297,7 +297,7 @@ app.post('/api/verify-code', async (req, res) => {
         });
 
         if (!record) {
-            console.log('❌ Invalid or expired code');
+            // //console.log('❌ Invalid or expired code');
             return res.status(400).json({
                 success: false,
                 message: 'Invalid or expired code. Please request a new one.'
@@ -317,8 +317,8 @@ app.post('/api/verify-code', async (req, res) => {
             { $set: { emailVerified: true, verifiedAt: new Date() } }
         );
 
-        console.log('✅ Email verified successfully for:', email);
-        console.log('User update result:', updateResult);
+        // //console.log('✅ Email verified successfully for:', email);
+        // //console.log('User update result:', updateResult);
 
         res.json({
             success: true,

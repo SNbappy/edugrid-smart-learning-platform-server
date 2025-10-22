@@ -5,7 +5,7 @@ const { validateClassroomId, findClassroom, createTaskObject } = require('./task
 const getTasks = async (req, res) => {
     try {
         const classroomId = req.params.id;
-        console.log('📝 Getting tasks for classroom:', classroomId);
+        //console.log('📝 Getting tasks for classroom:', classroomId);
 
         const validation = validateClassroomId(classroomId);
         if (!validation.valid) {
@@ -59,8 +59,8 @@ const createTask = async (req, res) => {
             createdBy
         } = req.body;
 
-        console.log('➕ Creating task for classroom:', classroomId);
-        console.log('📋 Task data:', { title, type, dueDate, points });
+        //console.log('➕ Creating task for classroom:', classroomId);
+        //console.log('📋 Task data:', { title, type, dueDate, points });
 
         if (!title) {
             return res.status(400).json({
@@ -106,7 +106,7 @@ const createTask = async (req, res) => {
             createdBy
         });
 
-        console.log('💾 Inserting task with ID:', task._id);
+        //console.log('💾 Inserting task with ID:', task._id);
 
         const result = await db.collection('classrooms').updateOne(
             { _id: new ObjectId(classroomId) },
@@ -130,7 +130,7 @@ const createTask = async (req, res) => {
             });
         }
 
-        console.log('✅ Task created successfully with ID:', task._id);
+        //console.log('✅ Task created successfully with ID:', task._id);
 
         res.status(201).json({
             success: true,
@@ -152,7 +152,7 @@ const getTaskById = async (req, res) => {
     try {
         const classroomId = req.params.classroomId || req.params.id;
         const taskId = req.params.taskId;
-        console.log('🔍 Getting task by ID:', { classroomId, taskId });
+        //console.log('🔍 Getting task by ID:', { classroomId, taskId });
 
         const validation = validateClassroomId(classroomId);
         if (!validation.valid) {
@@ -216,7 +216,7 @@ const updateTask = async (req, res) => {
         const taskId = req.params.taskId;
         const updateData = req.body;
 
-        console.log('📝 Updating task:', { classroomId, taskId });
+        //console.log('📝 Updating task:', { classroomId, taskId });
 
         const validation = validateClassroomId(classroomId);
         if (!validation.valid) {
@@ -294,7 +294,7 @@ const deleteTask = async (req, res) => {
         const classroomId = req.params.classroomId || req.params.id;
         const taskId = req.params.taskId;
 
-        console.log('🗑️ Deleting task:', { classroomId, taskId });
+        //console.log('🗑️ Deleting task:', { classroomId, taskId });
 
         const validation = validateClassroomId(classroomId);
         if (!validation.valid) {
@@ -340,7 +340,7 @@ const deleteTask = async (req, res) => {
             });
         }
 
-        console.log('✅ Task deleted successfully');
+        //console.log('✅ Task deleted successfully');
 
         res.json({
             success: true,

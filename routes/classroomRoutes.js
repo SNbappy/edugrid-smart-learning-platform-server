@@ -14,9 +14,9 @@ const {
 
 // Add logging middleware for debugging
 router.use((req, res, next) => {
-    console.log('🚀 Classroom route accessed:', req.method, req.originalUrl);
-    console.log('📝 Request body:', req.body);
-    console.log('📝 Request params:', req.params);
+    //console.log('🚀 Classroom route accessed:', req.method, req.originalUrl);
+    //console.log('📝 Request body:', req.body);
+    //console.log('📝 Request params:', req.params);
     next();
 });
 
@@ -50,7 +50,7 @@ router.get('/debug/permissions/:classroomId/:userEmail', async (req, res) => {
         const { getDB } = require('../database');
         const { ObjectId } = require('mongodb');
 
-        console.log('🔍 DEBUG PERMISSIONS REQUEST:', { classroomId, userEmail });
+        //console.log('🔍 DEBUG PERMISSIONS REQUEST:', { classroomId, userEmail });
 
         const db = getDB();
         const classroom = await db.collection('classrooms').findOne({

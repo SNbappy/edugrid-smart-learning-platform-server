@@ -6,7 +6,7 @@ const attendanceController = {
     getAttendance: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('📋 Getting attendance for classroom:', classroomId);
+            //console.log('📋 Getting attendance for classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -46,7 +46,7 @@ const attendanceController = {
             const classroomId = req.params.id;
             const { date, title, description } = req.body;
 
-            console.log('📅 Creating attendance session for classroom:', classroomId);
+            //console.log('📅 Creating attendance session for classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -98,7 +98,7 @@ const attendanceController = {
                 });
             }
 
-            console.log('✅ Attendance session created successfully');
+            //console.log('✅ Attendance session created successfully');
 
             res.json({
                 success: true,
@@ -121,7 +121,7 @@ const attendanceController = {
             const { id: classroomId, sessionId } = req.params;
             const { title, description, status } = req.body;
 
-            console.log('📝 Updating attendance session:', { classroomId, sessionId });
+            //console.log('📝 Updating attendance session:', { classroomId, sessionId });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -176,7 +176,7 @@ const attendanceController = {
             const { id: classroomId, sessionId } = req.params;
             const { studentEmail, status, markedBy } = req.body;
 
-            console.log('✅ Marking attendance:', { classroomId, sessionId, studentEmail, status });
+            //console.log('✅ Marking attendance:', { classroomId, sessionId, studentEmail, status });
 
             if (!studentEmail || !status) {
                 return res.status(400).json({
@@ -246,7 +246,7 @@ const attendanceController = {
     getAttendanceSession: async (req, res) => {
         try {
             const { id: classroomId, sessionId } = req.params;
-            console.log('🔍 Getting attendance session:', { classroomId, sessionId });
+            //console.log('🔍 Getting attendance session:', { classroomId, sessionId });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -291,7 +291,7 @@ const attendanceController = {
     deleteAttendanceSession: async (req, res) => {
         try {
             const { id: classroomId, sessionId } = req.params;
-            console.log('🗑️ Deleting attendance session:', { classroomId, sessionId });
+            //console.log('🗑️ Deleting attendance session:', { classroomId, sessionId });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {

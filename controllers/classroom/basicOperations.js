@@ -6,7 +6,7 @@ const basicOperations = {
     // Create Classroom
     createClassroom: async (req, res) => {
         try {
-            console.log('📚 Creating classroom:', req.body);
+            //console.log('📚 Creating classroom:', req.body);
 
             const db = getDB();
             const classroomsCollection = db.collection('classrooms');
@@ -97,7 +97,7 @@ const basicOperations = {
             };
 
             const result = await classroomsCollection.insertOne(newClassroom);
-            console.log('✅ Classroom created with ID:', result.insertedId);
+            //console.log('✅ Classroom created with ID:', result.insertedId);
 
             res.status(201).json({
                 success: true,
@@ -119,7 +119,7 @@ const basicOperations = {
     // Get all classrooms
     getAllClassrooms: async (req, res) => {
         try {
-            console.log('📋 Getting all classrooms');
+            //console.log('📋 Getting all classrooms');
 
             const db = getDB();
             const classroomsCollection = db.collection('classrooms');
@@ -134,7 +134,7 @@ const basicOperations = {
                 enrollmentPercentage: Math.round(((classroom.students?.length || 0) / classroom.maxStudents) * 100)
             }));
 
-            console.log(`✅ Found ${classrooms.length} classrooms`);
+            //console.log(`✅ Found ${classrooms.length} classrooms`);
 
             res.json({
                 success: true,
@@ -156,7 +156,7 @@ const basicOperations = {
     getMyClassrooms: async (req, res) => {
         try {
             const teacherEmail = req.params.teacherEmail;
-            console.log('👨‍🏫 Getting classrooms for teacher:', teacherEmail);
+            //console.log('👨‍🏫 Getting classrooms for teacher:', teacherEmail);
 
             const db = getDB();
             const classroomsCollection = db.collection('classrooms');
@@ -178,7 +178,7 @@ const basicOperations = {
                 }
             }));
 
-            console.log(`✅ Found ${classrooms.length} classrooms for ${teacherEmail}`);
+            //console.log(`✅ Found ${classrooms.length} classrooms for ${teacherEmail}`);
 
             res.json({
                 success: true,
@@ -200,7 +200,7 @@ const basicOperations = {
     getClassroomById: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('🔍 Getting classroom:', classroomId);
+            //console.log('🔍 Getting classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -234,7 +234,7 @@ const basicOperations = {
                 }
             };
 
-            console.log('✅ Classroom found:', classroom.name);
+            //console.log('✅ Classroom found:', classroom.name);
 
             res.json({
                 success: true,
@@ -256,7 +256,7 @@ const basicOperations = {
         try {
             const { classCode, studentEmail, studentName } = req.body;
 
-            console.log('🔗 Student joining classroom:', { classCode, studentEmail });
+            //console.log('🔗 Student joining classroom:', { classCode, studentEmail });
 
             if (!classCode || !studentEmail || !studentName) {
                 return res.status(400).json({
@@ -321,7 +321,7 @@ const basicOperations = {
                 });
             }
 
-            console.log('✅ Student successfully joined classroom');
+            //console.log('✅ Student successfully joined classroom');
 
             res.json({
                 success: true,
@@ -349,7 +349,7 @@ const basicOperations = {
     getStudentClassrooms: async (req, res) => {
         try {
             const studentEmail = req.params.studentEmail;
-            console.log('👨‍🎓 Getting classrooms for student:', studentEmail);
+            //console.log('👨‍🎓 Getting classrooms for student:', studentEmail);
 
             const db = getDB();
             const classroomsCollection = db.collection('classrooms');
@@ -359,7 +359,7 @@ const basicOperations = {
                 isActive: true
             }).sort({ 'students.joinedAt': -1 }).toArray();
 
-            console.log(`✅ Found ${classrooms.length} classrooms for student ${studentEmail}`);
+            //console.log(`✅ Found ${classrooms.length} classrooms for student ${studentEmail}`);
 
             res.json({
                 success: true,
@@ -383,7 +383,7 @@ const basicOperations = {
             const classroomId = req.params.id;
             const { studentEmail } = req.body;
 
-            console.log('👋 Student leaving classroom:', { classroomId, studentEmail });
+            //console.log('👋 Student leaving classroom:', { classroomId, studentEmail });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -409,7 +409,7 @@ const basicOperations = {
                 });
             }
 
-            console.log('✅ Student successfully left classroom');
+            //console.log('✅ Student successfully left classroom');
 
             res.json({
                 success: true,
@@ -432,7 +432,7 @@ const basicOperations = {
             const classroomId = req.params.id;
             const updateData = req.body;
 
-            console.log('📝 Updating classroom:', classroomId);
+            //console.log('📝 Updating classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -467,7 +467,7 @@ const basicOperations = {
                 });
             }
 
-            console.log('✅ Classroom updated successfully');
+            //console.log('✅ Classroom updated successfully');
 
             res.json({
                 success: true,
@@ -488,7 +488,7 @@ const basicOperations = {
     deleteClassroom: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('🗑️ Deleting classroom:', classroomId);
+            //console.log('🗑️ Deleting classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -517,7 +517,7 @@ const basicOperations = {
                 });
             }
 
-            console.log('✅ Classroom deleted successfully');
+            //console.log('✅ Classroom deleted successfully');
 
             res.json({
                 success: true,
@@ -538,7 +538,7 @@ const basicOperations = {
     getClassroomStats: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('📊 Getting classroom stats:', classroomId);
+            //console.log('📊 Getting classroom stats:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {

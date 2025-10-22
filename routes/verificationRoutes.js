@@ -71,7 +71,7 @@ module.exports = (db) => {
                 return res.status(400).json({ success: false, message: 'Email is required' });
             }
 
-            console.log('📧 Sending verification code to:', email);
+            //console.log('📧 Sending verification code to:', email);
 
             // Generate 6-digit code
             const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -94,13 +94,13 @@ module.exports = (db) => {
             // ✅ SEND EMAIL
             try {
                 await sendVerificationEmail(email, verificationCode);
-                console.log(`✅ Verification email sent to ${email}`);
+                //console.log(`✅ Verification email sent to ${email}`);
             } catch (emailError) {
                 console.error('❌ Failed to send email:', emailError);
                 // Continue anyway - code is still valid
             }
 
-            console.log(`✅ Verification code generated: ${verificationCode}`);
+            //console.log(`✅ Verification code generated: ${verificationCode}`);
 
             res.json({
                 success: true,
@@ -127,7 +127,7 @@ module.exports = (db) => {
                 });
             }
 
-            console.log('🔍 Verifying code for:', email, 'Code:', code);
+            //console.log('🔍 Verifying code for:', email, 'Code:', code);
 
             const verificationCollection = db.collection('verificationCodes');
 
@@ -140,7 +140,7 @@ module.exports = (db) => {
             });
 
             if (!record) {
-                console.log('❌ Invalid or expired code');
+                //console.log('❌ Invalid or expired code');
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid or expired code. Please request a new one.'
@@ -160,7 +160,7 @@ module.exports = (db) => {
                 { $set: { emailVerified: true, verifiedAt: new Date() } }
             );
 
-            console.log('✅ Email verified successfully for:', email);
+            //console.log('✅ Email verified successfully for:', email);
 
             res.json({
                 success: true,

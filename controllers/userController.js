@@ -4,7 +4,7 @@ const userController = {
     // Create User (Sign Up) - Fixed default role
     createUser: async (req, res) => {
         try {
-            console.log('🎯 Creating user:', req.body);
+            // //console.log('🎯 Creating user:', req.body);
 
             const db = getDB();
             const usersCollection = db.collection('users');
@@ -21,7 +21,7 @@ const userController = {
             // Check if user exists
             const existingUser = await usersCollection.findOne({ email });
             if (existingUser) {
-                console.log('⚠️ User already exists:', email);
+                // //console.log('⚠️ User already exists:', email);
                 return res.status(400).json({
                     success: false,
                     message: 'User already exists'
@@ -53,7 +53,7 @@ const userController = {
 
             console.log('💾 Inserting user into database');
             const result = await usersCollection.insertOne(newUser);
-            console.log('✅ User created with ID:', result.insertedId);
+            // //console.log('✅ User created with ID:', result.insertedId);
 
             res.status(201).json({
                 success: true,
@@ -78,8 +78,8 @@ const userController = {
             const email = req.params.email;
             const updateData = req.body;
 
-            console.log('📝 Updating user profile:', email);
-            console.log('📝 Update data:', updateData);
+            // //console.log('📝 Updating user profile:', email);
+            // //console.log('📝 Update data:', updateData);
 
             const db = getDB();
             const usersCollection = db.collection('users');
@@ -111,7 +111,7 @@ const userController = {
                 updatedAt: new Date()
             };
 
-            console.log('📝 Final update fields:', updateFields);
+            // //console.log('📝 Final update fields:', updateFields);
 
             const result = await usersCollection.updateOne(
                 { email: email },
@@ -125,7 +125,7 @@ const userController = {
                 });
             }
 
-            console.log('✅ User profile updated successfully');
+            // //console.log('✅ User profile updated successfully');
 
             // Get updated user to return
             const updatedUser = await usersCollection.findOne({ email: email });
@@ -150,14 +150,14 @@ const userController = {
     getUserByEmail: async (req, res) => {
         try {
             const email = req.params.email;
-            console.log('🔍 Getting user:', email);
+            //console.log('🔍 Getting user:', email);
 
             const db = getDB();
             const usersCollection = db.collection('users');
             const user = await usersCollection.findOne({ email: email });
 
             if (!user) {
-                console.log('❌ User not found:', email);
+                //console.log('❌ User not found:', email);
                 return res.status(404).json({
                     success: false,
                     message: 'User not found'
@@ -170,7 +170,7 @@ const userController = {
 
             // Check for missing profile fields
             if (!user.profile.hasOwnProperty('district') || !user.profile.hasOwnProperty('city')) {
-                console.log('🔄 Migrating profile schema for:', email);
+                //console.log('🔄 Migrating profile schema for:', email);
                 updates['profile.district'] = user.profile.district || '';
                 updates['profile.city'] = user.profile.city || '';
                 needsMigration = true;
@@ -178,7 +178,7 @@ const userController = {
 
             // Check for missing coverPhotoURL field
             if (!user.hasOwnProperty('coverPhotoURL')) {
-                console.log('🔄 Adding coverPhotoURL field for:', email);
+                //console.log('🔄 Adding coverPhotoURL field for:', email);
                 updates['coverPhotoURL'] = '';
                 needsMigration = true;
             }
@@ -196,7 +196,7 @@ const userController = {
                 if (updates['coverPhotoURL'] !== undefined) user.coverPhotoURL = updates['coverPhotoURL'];
             }
 
-            console.log('✅ User found:', email);
+            //console.log('✅ User found:', email);
             res.json({
                 success: true,
                 user: user
@@ -214,13 +214,13 @@ const userController = {
 
     getAllUsers: async (req, res) => {
         try {
-            console.log('📋 Getting all users');
+            //console.log('📋 Getting all users');
 
             const db = getDB();
             const usersCollection = db.collection('users');
             const users = await usersCollection.find({}).toArray();
 
-            console.log(`✅ Found ${users.length} users`);
+            //console.log(`✅ Found ${users.length} users`);
 
             res.json({
                 success: true,

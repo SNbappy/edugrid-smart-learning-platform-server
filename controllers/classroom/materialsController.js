@@ -6,7 +6,7 @@ const materialsController = {
     getMaterials: async (req, res) => {
         try {
             const classroomId = req.params.id;
-            console.log('📄 Getting materials for classroom:', classroomId);
+            //console.log('📄 Getting materials for classroom:', classroomId);
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -57,8 +57,8 @@ const materialsController = {
                 publicId
             } = req.body;
 
-            console.log('➕ Adding material:', { title, type, url, youtubeUrl, embedUrl });
-            console.log('📝 Full request body:', JSON.stringify(req.body, null, 2));
+            //console.log('➕ Adding material:', { title, type, url, youtubeUrl, embedUrl });
+            //console.log('📝 Full request body:', JSON.stringify(req.body, null, 2));
 
             // Basic validation
             if (!title || !title.trim()) {
@@ -154,8 +154,8 @@ const materialsController = {
                 });
             }
 
-            console.log('📋 Created material object:', material);
-            console.log('🗂️ Will store in field:', dbFieldType);
+            //console.log('📋 Created material object:', material);
+            //console.log('🗂️ Will store in field:', dbFieldType);
 
             // Add to database
             const updateField = `materials.${dbFieldType}`;
@@ -181,7 +181,7 @@ const materialsController = {
                 });
             }
 
-            console.log('✅ Material added successfully to', updateField);
+            //console.log('✅ Material added successfully to', updateField);
 
             res.status(201).json({
                 success: true,
@@ -204,7 +204,7 @@ const materialsController = {
         try {
             const { id: classroomId, materialId } = req.params;
 
-            console.log('🗑️ Backend: Attempting to delete material:', { classroomId, materialId });
+            //console.log('🗑️ Backend: Attempting to delete material:', { classroomId, materialId });
 
             const validation = validateClassroomId(classroomId);
             if (!validation.valid) {
@@ -225,7 +225,7 @@ const materialsController = {
                 });
             }
 
-            console.log('🔍 Searching for material in all arrays...');
+            //console.log('🔍 Searching for material in all arrays...');
 
             // Search in all three arrays to find the material
             const materialArrays = [
@@ -242,7 +242,7 @@ const materialsController = {
                 if (found) {
                     foundInField = fieldName;
                     foundMaterial = found;
-                    console.log(`✅ Found material in ${fieldName}:`, found.title);
+                    //console.log(`✅ Found material in ${fieldName}:`, found.title);
                     break;
                 }
             }
@@ -256,7 +256,7 @@ const materialsController = {
             }
 
             // Delete from the correct array
-            console.log(`🗂️ Deleting from ${foundInField}`);
+            //console.log(`🗂️ Deleting from ${foundInField}`);
 
             const result = await db.collection('classrooms').updateOne(
                 { _id: new ObjectId(classroomId) },
@@ -266,48 +266,48 @@ const materialsController = {
                 }
             );
 
-            console.log('📊 Delete operation result:', {
-                matchedCount: result.matchedCount,
-                modifiedCount: result.modifiedCount,
-                foundInField,
-                materialTitle: foundMaterial.title
-            });
+            //console.log('📊 Delete operation result:', {
+        //     matchedCount: result.matchedCount,
+        //         modifiedCount: result.modifiedCount,
+        //             foundInField,
+        //             materialTitle: foundMaterial.title
+        // });
 
-            if (result.matchedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Classroom not found during deletion'
-                });
-            }
-
-            if (result.modifiedCount === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Material not found or already deleted'
-                });
-            }
-
-            console.log('✅ Material successfully deleted from database');
-
-            res.json({
-                success: true,
-                message: 'Material deleted successfully'
-            });
-
-        } catch (error) {
-            console.error('❌ Error deleting material:', error);
-            res.status(500).json({
+        if (result.matchedCount === 0) {
+            return res.status(404).json({
                 success: false,
-                message: 'Failed to delete material',
-                error: error.message
+                message: 'Classroom not found during deletion'
             });
         }
-    },
+
+        if (result.modifiedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Material not found or already deleted'
+            });
+        }
+
+        //console.log('✅ Material successfully deleted from database');
+
+        res.json({
+            success: true,
+            message: 'Material deleted successfully'
+        });
+
+    } catch(error) {
+        console.error('❌ Error deleting material:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete material',
+            error: error.message
+        });
+    }
+},
 
     updateMaterial: async (req, res) => {
         try {
             const { id: classroomId, materialId } = req.params;
-            console.log('📝 Updating material:', { classroomId, materialId });
+            //console.log('📝 Updating material:', { classroomId, materialId });
 
             // Simplified implementation for now
             res.json({
@@ -325,64 +325,64 @@ const materialsController = {
         }
     },
 
-    // Add to your materialsController.js
-    downloadMaterial: async (req, res) => {
-        try {
-            const { id: classroomId, materialId } = req.params;
+        // Add to your materialsController.js
+        downloadMaterial: async (req, res) => {
+            try {
+                const { id: classroomId, materialId } = req.params;
 
-            const validation = validateClassroomId(classroomId);
-            if (!validation.valid) {
-                return res.status(400).json({
+                const validation = validateClassroomId(classroomId);
+                if (!validation.valid) {
+                    return res.status(400).json({
+                        success: false,
+                        message: validation.message
+                    });
+                }
+
+                const db = getDB();
+                const classroom = await findClassroom(db, classroomId);
+
+                if (!classroom) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Classroom not found'
+                    });
+                }
+
+                // Find the material
+                let material = null;
+                ['files', 'links', 'videos'].forEach(type => {
+                    const found = classroom.materials[type]?.find(m => m.id.toString() === materialId);
+                    if (found) material = found;
+                });
+
+                if (!material) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Material not found'
+                    });
+                }
+
+                // Generate proper download URL
+                const downloadUrl = material.url.includes('?')
+                    ? `${material.url}&fl_attachment=true`
+                    : `${material.url}?fl_attachment=true`;
+
+                res.json({
+                    success: true,
+                    downloadUrl: downloadUrl,
+                    fileName: material.fileName,
+                    fileSize: material.fileSize
+                });
+
+            } catch (error) {
+                console.error('❌ Error generating download URL:', error);
+                res.status(500).json({
                     success: false,
-                    message: validation.message
+                    message: 'Failed to generate download URL',
+                    error: error.message
                 });
             }
-
-            const db = getDB();
-            const classroom = await findClassroom(db, classroomId);
-
-            if (!classroom) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Classroom not found'
-                });
-            }
-
-            // Find the material
-            let material = null;
-            ['files', 'links', 'videos'].forEach(type => {
-                const found = classroom.materials[type]?.find(m => m.id.toString() === materialId);
-                if (found) material = found;
-            });
-
-            if (!material) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Material not found'
-                });
-            }
-
-            // Generate proper download URL
-            const downloadUrl = material.url.includes('?')
-                ? `${material.url}&fl_attachment=true`
-                : `${material.url}?fl_attachment=true`;
-
-            res.json({
-                success: true,
-                downloadUrl: downloadUrl,
-                fileName: material.fileName,
-                fileSize: material.fileSize
-            });
-
-        } catch (error) {
-            console.error('❌ Error generating download URL:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Failed to generate download URL',
-                error: error.message
-            });
         }
-    }
 
 };
 
