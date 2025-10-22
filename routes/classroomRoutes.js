@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const classroomController = require('../controllers/classroomController');
 const attendanceController = require('../controllers/classroom/attendanceController');
+const { verifyToken, verifyTeacher, verifyEnrolled } = require('../middleware/authMiddleware');
 
 // Import submission operations controller
 const {
@@ -14,13 +15,15 @@ const {
 
 // Add logging middleware for debugging
 router.use((req, res, next) => {
-    //console.log('🚀 Classroom route accessed:', req.method, req.originalUrl);
-    //console.log('📝 Request body:', req.body);
-    //console.log('📝 Request params:', req.params);
+    console.log('🚀 Classroom route accessed:', req.method, req.originalUrl);
+    console.log('📝 User:', req.user?.email || 'Not authenticated');
     next();
 });
 
-// ===== DEBUGGING ROUTES (TEMPORARY - PLACE AT TOP TO AVOID CONFLICTS) =====
+// ===== PUBLIC ROUTES (No authentication required) =====
+
+// GET /api/classrooms - Get all active classrooms (for browsing/All Classes page)
+router.get('/', classroomController.getAllClassrooms);
 
 // GET /api/classrooms/debug/routes - List all registered routes (for debugging)
 router.get('/debug/routes', (req, res) => {
@@ -42,15 +45,18 @@ router.get('/debug/routes', (req, res) => {
     });
 });
 
-// GET /api/classrooms/debug/permissions/:classroomId/:userEmail - Debug permissions (TEMPORARY)
+// ===== APPLY AUTHENTICATION TO ALL ROUTES BELOW =====
+router.use(verifyToken);
+
+// ===== DEBUGGING ROUTES (AUTHENTICATED) =====
+
+// GET /api/classrooms/debug/permissions/:classroomId/:userEmail - Debug permissions
 router.get('/debug/permissions/:classroomId/:userEmail', async (req, res) => {
     try {
         const { classroomId, userEmail } = req.params;
 
         const { getDB } = require('../database');
         const { ObjectId } = require('mongodb');
-
-        //console.log('🔍 DEBUG PERMISSIONS REQUEST:', { classroomId, userEmail });
 
         const db = getDB();
         const classroom = await db.collection('classrooms').findOne({
@@ -67,9 +73,10 @@ router.get('/debug/permissions/:classroomId/:userEmail', async (req, res) => {
         const permissionChecks = {
             isOwner: classroom.owner === userEmail,
             isTeacher: classroom.teacher === userEmail,
+            isTeacherEmail: classroom.teacherEmail === userEmail,
             isCreatedBy: classroom.createdBy === userEmail,
             isInInstructorsList: classroom.instructors && classroom.instructors.includes(userEmail),
-            isInInstructorsArray: Array.isArray(classroom.instructors) && classroom.instructors.includes(userEmail)
+            isStudent: classroom.students?.some(s => s.email === userEmail)
         };
 
         const hasAnyPermission = Object.values(permissionChecks).some(check => check === true);
@@ -77,30 +84,27 @@ router.get('/debug/permissions/:classroomId/:userEmail', async (req, res) => {
         res.json({
             success: true,
             debug: {
-                userEmail,
+                authenticatedUser: req.user.email,
+                requestedUserEmail: userEmail,
                 classroomId,
                 classroomData: {
                     _id: classroom._id,
                     name: classroom.name,
-                    owner: classroom.owner,
-                    teacher: classroom.teacher,
-                    createdBy: classroom.createdBy,
-                    instructors: classroom.instructors,
+                    teacherEmail: classroom.teacherEmail,
                     allKeys: Object.keys(classroom),
-                    students: classroom.students ? classroom.students.length : 0,
+                    studentsCount: classroom.students ? classroom.students.length : 0,
                     createdAt: classroom.createdAt
                 },
                 permissionChecks,
                 hasAnyPermission,
-                recommendation: hasAnyPermission ? 'User should have access' : 'Check if user email matches any instructor field'
+                recommendation: hasAnyPermission ? 'User should have access' : 'User does not have permissions'
             }
         });
     } catch (error) {
         console.error('❌ Debug permissions error:', error);
         res.status(500).json({
             success: false,
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: error.message
         });
     }
 });
@@ -109,9 +113,6 @@ router.get('/debug/permissions/:classroomId/:userEmail', async (req, res) => {
 
 // POST /api/classrooms - Create new classroom
 router.post('/', classroomController.createClassroom);
-
-// GET /api/classrooms - Get all active classrooms (for All Classes page)
-router.get('/', classroomController.getAllClassrooms);
 
 // POST /api/classrooms/join - Join classroom with class code
 router.post('/join', classroomController.joinClassroom);
@@ -126,189 +127,185 @@ router.get('/teacher/:teacherEmail', classroomController.getMyClassrooms);
 // GET /api/classrooms/student/:studentEmail - Get classrooms student is enrolled in
 router.get('/student/:studentEmail', classroomController.getStudentClassrooms);
 
-// POST /api/classrooms/:id/leave - Leave a classroom
-router.post('/:id/leave', classroomController.leaveClassroom);
+// POST /api/classrooms/:id/leave - Leave a classroom (enrolled users only)
+router.post('/:id/leave', verifyEnrolled, classroomController.leaveClassroom);
 
 // ===== INDIVIDUAL CLASSROOM ROUTES =====
 
-// GET /api/classrooms/:id - Get single classroom details
-router.get('/:id', classroomController.getClassroomById);
+// GET /api/classrooms/:id - Get single classroom details (enrolled users only)
+router.get('/:id', verifyEnrolled, classroomController.getClassroomById);
 
-// PUT /api/classrooms/:id - Update classroom information
-router.put('/:id', classroomController.updateClassroom);
+// PUT /api/classrooms/:id - Update classroom information (teacher only)
+router.put('/:id', verifyTeacher, classroomController.updateClassroom);
 
-// DELETE /api/classrooms/:id - Delete (soft delete) classroom
-router.delete('/:id', classroomController.deleteClassroom);
+// DELETE /api/classrooms/:id - Delete (soft delete) classroom (teacher only)
+router.delete('/:id', verifyTeacher, classroomController.deleteClassroom);
 
-// GET /api/classrooms/:id/stats - Get classroom statistics and analytics
-router.get('/:id/stats', classroomController.getClassroomStats);
+// GET /api/classrooms/:id/stats - Get classroom statistics (enrolled users only)
+router.get('/:id/stats', verifyEnrolled, classroomController.getClassroomStats);
 
 // ===== MATERIALS ROUTES =====
 
-// GET /api/classrooms/:id/materials - Get class materials
-router.get('/:id/materials', classroomController.getMaterials);
+// GET /api/classrooms/:id/materials - Get class materials (enrolled users only)
+router.get('/:id/materials', verifyEnrolled, classroomController.getMaterials);
 
-// POST /api/classrooms/:id/materials - Add new material
-router.post('/:id/materials', classroomController.addMaterial);
+// POST /api/classrooms/:id/materials - Add new material (teacher only)
+router.post('/:id/materials', verifyTeacher, classroomController.addMaterial);
 
-// DELETE /api/classrooms/:id/materials/:materialId - Delete material
-router.delete('/:id/materials/:materialId', classroomController.deleteMaterial);
+// DELETE /api/classrooms/:id/materials/:materialId - Delete material (teacher only)
+router.delete('/:id/materials/:materialId', verifyTeacher, classroomController.deleteMaterial);
 
-// PUT /api/classrooms/:id/materials/:materialId - Update material
-router.put('/:id/materials/:materialId', classroomController.updateMaterial);
+// PUT /api/classrooms/:id/materials/:materialId - Update material (teacher only)
+router.put('/:id/materials/:materialId', verifyTeacher, classroomController.updateMaterial);
 
 // ===== ATTENDANCE ROUTES =====
-// FIXED: Updated routes to match frontend calls and use attendanceController
 
-// GET /api/classrooms/:id/attendance - Get attendance data
-router.get('/:id/attendance', attendanceController.getAttendance);
+// GET /api/classrooms/:id/attendance - Get attendance data (enrolled users only)
+router.get('/:id/attendance', verifyEnrolled, attendanceController.getAttendance);
 
-// POST /api/classrooms/:id/attendance/sessions - Create attendance session
-router.post('/:id/attendance/sessions', attendanceController.createAttendanceSession);
+// POST /api/classrooms/:id/attendance/sessions - Create attendance session (teacher only)
+router.post('/:id/attendance/sessions', verifyTeacher, attendanceController.createAttendanceSession);
 
-// GET /api/classrooms/:id/attendance/sessions/:sessionId - Get specific session
-router.get('/:id/attendance/sessions/:sessionId', attendanceController.getAttendanceSession);
+// GET /api/classrooms/:id/attendance/sessions/:sessionId - Get specific session (enrolled users only)
+router.get('/:id/attendance/sessions/:sessionId', verifyEnrolled, attendanceController.getAttendanceSession);
 
-// PUT /api/classrooms/:id/attendance/sessions/:sessionId - Update attendance session
-router.put('/:id/attendance/sessions/:sessionId', attendanceController.updateAttendanceSession);
+// PUT /api/classrooms/:id/attendance/sessions/:sessionId - Update attendance session (teacher only)
+router.put('/:id/attendance/sessions/:sessionId', verifyTeacher, attendanceController.updateAttendanceSession);
 
-// POST /api/classrooms/:id/attendance/sessions/:sessionId/mark - Mark attendance
-router.post('/:id/attendance/sessions/:sessionId/mark', attendanceController.markAttendance);
+// POST /api/classrooms/:id/attendance/sessions/:sessionId/mark - Mark attendance (teacher only)
+router.post('/:id/attendance/sessions/:sessionId/mark', verifyTeacher, attendanceController.markAttendance);
 
-// DELETE /api/classrooms/:id/attendance/sessions/:sessionId - Delete session
-router.delete('/:id/attendance/sessions/:sessionId', attendanceController.deleteAttendanceSession);
+// DELETE /api/classrooms/:id/attendance/sessions/:sessionId - Delete session (teacher only)
+router.delete('/:id/attendance/sessions/:sessionId', verifyTeacher, attendanceController.deleteAttendanceSession);
 
 // ===== TASKS/ASSIGNMENTS ROUTES =====
 
-// GET /api/classrooms/:id/tasks - Get classroom tasks/assignments
-router.get('/:id/tasks', classroomController.getTasks);
+// GET /api/classrooms/:id/tasks - Get classroom tasks/assignments (enrolled users only)
+router.get('/:id/tasks', verifyEnrolled, classroomController.getTasks);
 
-// POST /api/classrooms/:id/tasks - Create new task/assignment
-router.post('/:id/tasks', classroomController.createTask);
+// POST /api/classrooms/:id/tasks - Create new task/assignment (teacher only)
+router.post('/:id/tasks', verifyTeacher, classroomController.createTask);
 
-// GET /api/classrooms/:id/tasks/:taskId - Get specific task
-router.get('/:id/tasks/:taskId', classroomController.getTaskById);
+// GET /api/classrooms/:id/tasks/:taskId - Get specific task (enrolled users only)
+router.get('/:id/tasks/:taskId', verifyEnrolled, classroomController.getTaskById);
 
-// PUT /api/classrooms/:id/tasks/:taskId - Update task
-router.put('/:id/tasks/:taskId', classroomController.updateTask);
+// PUT /api/classrooms/:id/tasks/:taskId - Update task (teacher only)
+router.put('/:id/tasks/:taskId', verifyTeacher, classroomController.updateTask);
 
-// DELETE /api/classrooms/:id/tasks/:taskId - Delete task
-router.delete('/:id/tasks/:taskId', classroomController.deleteTask);
+// DELETE /api/classrooms/:id/tasks/:taskId - Delete task (teacher only)
+router.delete('/:id/tasks/:taskId', verifyTeacher, classroomController.deleteTask);
 
-// ===== SUBMISSION ROUTES (UPDATED) =====
+// ===== SUBMISSION ROUTES =====
 
-// POST /api/classrooms/:id/tasks/:taskId/submit - Submit task solution (legacy)
-router.post('/:id/tasks/:taskId/submit', classroomController.submitTask);
+// POST /api/classrooms/:id/tasks/:taskId/submit - Submit task solution (enrolled users only)
+router.post('/:id/tasks/:taskId/submit', verifyEnrolled, classroomController.submitTask);
 
-// **NEW SUBMISSION ROUTES:**
+// GET /api/classrooms/:classroomId/tasks/:taskId/submissions - Get task submissions (enrolled users only)
+router.get('/:classroomId/tasks/:taskId/submissions', verifyEnrolled, getTaskSubmissions);
 
-// GET /api/classrooms/:classroomId/tasks/:taskId/submissions - Get task submissions
-router.get('/:classroomId/tasks/:taskId/submissions', getTaskSubmissions);
+// POST /api/classrooms/:classroomId/tasks/:taskId/submissions - Create submission (enrolled users only)
+router.post('/:classroomId/tasks/:taskId/submissions', verifyEnrolled, submitTask);
 
-// POST /api/classrooms/:classroomId/tasks/:taskId/submissions - Create submission (alternative endpoint)
-router.post('/:classroomId/tasks/:taskId/submissions', submitTask);
+// PUT /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId - Resubmit task (enrolled users only)
+router.put('/:classroomId/tasks/:taskId/submissions/:submissionId', verifyEnrolled, resubmitTask);
 
-// PUT /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId - Resubmit task
-router.put('/:classroomId/tasks/:taskId/submissions/:submissionId', resubmitTask);
+// GET /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId - Get specific submission (enrolled users only)
+router.get('/:classroomId/tasks/:taskId/submissions/:submissionId', verifyEnrolled, getSubmissionById);
 
-// GET /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId - Get specific submission
-router.get('/:classroomId/tasks/:taskId/submissions/:submissionId', getSubmissionById);
-
-// **GRADING ROUTE:**
-// PUT /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId/grade - Grade submission
-router.put('/:classroomId/tasks/:taskId/submissions/:submissionId/grade', gradeSubmission);
+// PUT /api/classrooms/:classroomId/tasks/:taskId/submissions/:submissionId/grade - Grade submission (teacher only)
+router.put('/:classroomId/tasks/:taskId/submissions/:submissionId/grade', verifyTeacher, gradeSubmission);
 
 // ===== MARKS/GRADEBOOK ROUTES =====
 
-// GET /api/classrooms/:id/marks - Get gradebook/marks
-router.get('/:id/marks', classroomController.getMarks);
+// GET /api/classrooms/:id/marks - Get gradebook/marks (enrolled users only)
+router.get('/:id/marks', verifyEnrolled, classroomController.getMarks);
 
-// POST /api/classrooms/:id/marks - Add/update marks
-router.post('/:id/marks', classroomController.addMarks);
+// POST /api/classrooms/:id/marks - Add/update marks (teacher only)
+router.post('/:id/marks', verifyTeacher, classroomController.addMarks);
 
-// PUT /api/classrooms/:id/marks/:markId - Update specific mark
-router.put('/:id/marks/:markId', classroomController.updateMark);
+// PUT /api/classrooms/:id/marks/:markId - Update specific mark (teacher only)
+router.put('/:id/marks/:markId', verifyTeacher, classroomController.updateMark);
 
-// DELETE /api/classrooms/:id/marks/:markId - Delete mark
-router.delete('/:id/marks/:markId', classroomController.deleteMark);
+// DELETE /api/classrooms/:id/marks/:markId - Delete mark (teacher only)
+router.delete('/:id/marks/:markId', verifyTeacher, classroomController.deleteMark);
 
-// GET /api/classrooms/:id/marks/student/:studentEmail - Get marks for specific student
-router.get('/:id/marks/student/:studentEmail', classroomController.getStudentMarks);
+// GET /api/classrooms/:id/marks/student/:studentEmail - Get marks for specific student (enrolled users only)
+router.get('/:id/marks/student/:studentEmail', verifyEnrolled, classroomController.getStudentMarks);
 
 // ===== STUDENT MANAGEMENT ROUTES =====
 
-// GET /api/classrooms/:id/students - Get all students in classroom
-router.get('/:id/students', classroomController.getClassroomStudents);
+// GET /api/classrooms/:id/students - Get all students in classroom (enrolled users only)
+router.get('/:id/students', verifyEnrolled, classroomController.getClassroomStudents);
 
-// POST /api/classrooms/:id/students/remove - Remove student from classroom
-router.post('/:id/students/remove', classroomController.removeStudent);
+// POST /api/classrooms/:id/students/remove - Remove student from classroom (teacher only)
+router.post('/:id/students/remove', verifyTeacher, classroomController.removeStudent);
 
-// POST /api/classrooms/:id/students/add - Add student to classroom (alternative to join)
-router.post('/:id/students/add', classroomController.addStudent);
+// POST /api/classrooms/:id/students/add - Add student to classroom (teacher only)
+router.post('/:id/students/add', verifyTeacher, classroomController.addStudent);
 
-// GET /api/classrooms/:id/students/:studentEmail - Get specific student info in classroom
-router.get('/:id/students/:studentEmail', classroomController.getStudentInfo);
+// GET /api/classrooms/:id/students/:studentEmail - Get specific student info (enrolled users only)
+router.get('/:id/students/:studentEmail', verifyEnrolled, classroomController.getStudentInfo);
 
 // ===== ANALYTICS AND REPORTING ROUTES =====
 
-// GET /api/classrooms/:id/analytics - Get detailed analytics
-router.get('/:id/analytics', classroomController.getClassroomAnalytics);
+// GET /api/classrooms/:id/analytics - Get detailed analytics (enrolled users only)
+router.get('/:id/analytics', verifyEnrolled, classroomController.getClassroomAnalytics);
 
-// GET /api/classrooms/:id/reports/attendance - Get attendance report
-router.get('/:id/reports/attendance', classroomController.getAttendanceReport);
+// GET /api/classrooms/:id/reports/attendance - Get attendance report (enrolled users only)
+router.get('/:id/reports/attendance', verifyEnrolled, classroomController.getAttendanceReport);
 
-// GET /api/classrooms/:id/reports/performance - Get performance report
-router.get('/:id/reports/performance', classroomController.getPerformanceReport);
+// GET /api/classrooms/:id/reports/performance - Get performance report (enrolled users only)
+router.get('/:id/reports/performance', verifyEnrolled, classroomController.getPerformanceReport);
 
-// GET /api/classrooms/:id/reports/materials - Get materials usage report
-router.get('/:id/reports/materials', classroomController.getMaterialsReport);
+// GET /api/classrooms/:id/reports/materials - Get materials usage report (enrolled users only)
+router.get('/:id/reports/materials', verifyEnrolled, classroomController.getMaterialsReport);
 
 // ===== COMMUNICATION ROUTES =====
 
-// GET /api/classrooms/:id/announcements - Get classroom announcements
-router.get('/:id/announcements', classroomController.getAnnouncements);
+// GET /api/classrooms/:id/announcements - Get classroom announcements (enrolled users only)
+router.get('/:id/announcements', verifyEnrolled, classroomController.getAnnouncements);
 
-// POST /api/classrooms/:id/announcements - Create new announcement
-router.post('/:id/announcements', classroomController.createAnnouncement);
+// POST /api/classrooms/:id/announcements - Create new announcement (teacher only)
+router.post('/:id/announcements', verifyTeacher, classroomController.createAnnouncement);
 
-// PUT /api/classrooms/:id/announcements/:announcementId - Update announcement
-router.put('/:id/announcements/:announcementId', classroomController.updateAnnouncement);
+// PUT /api/classrooms/:id/announcements/:announcementId - Update announcement (teacher only)
+router.put('/:id/announcements/:announcementId', verifyTeacher, classroomController.updateAnnouncement);
 
-// DELETE /api/classrooms/:id/announcements/:announcementId - Delete announcement
-router.delete('/:id/announcements/:announcementId', classroomController.deleteAnnouncement);
+// DELETE /api/classrooms/:id/announcements/:announcementId - Delete announcement (teacher only)
+router.delete('/:id/announcements/:announcementId', verifyTeacher, classroomController.deleteAnnouncement);
 
 // ===== UTILITY ROUTES =====
 
-// POST /api/classrooms/:id/duplicate - Duplicate classroom
-router.post('/:id/duplicate', classroomController.duplicateClassroom);
+// POST /api/classrooms/:id/duplicate - Duplicate classroom (teacher only)
+router.post('/:id/duplicate', verifyTeacher, classroomController.duplicateClassroom);
 
-// POST /api/classrooms/:id/archive - Archive classroom
-router.post('/:id/archive', classroomController.archiveClassroom);
+// POST /api/classrooms/:id/archive - Archive classroom (teacher only)
+router.post('/:id/archive', verifyTeacher, classroomController.archiveClassroom);
 
-// POST /api/classrooms/:id/restore - Restore archived classroom
-router.post('/:id/restore', classroomController.restoreClassroom);
+// POST /api/classrooms/:id/restore - Restore archived classroom (teacher only)
+router.post('/:id/restore', verifyTeacher, classroomController.restoreClassroom);
 
-// GET /api/classrooms/:id/export - Export classroom data
-router.get('/:id/export', classroomController.exportClassroomData);
+// GET /api/classrooms/:id/export - Export classroom data (teacher only)
+router.get('/:id/export', verifyTeacher, classroomController.exportClassroomData);
 
-// POST /api/classrooms/:id/import - Import classroom data
-router.post('/:id/import', classroomController.importClassroomData);
+// POST /api/classrooms/:id/import - Import classroom data (teacher only)
+router.post('/:id/import', verifyTeacher, classroomController.importClassroomData);
 
 // ===== SETTINGS ROUTES =====
 
-// GET /api/classrooms/:id/settings - Get classroom settings
-router.get('/:id/settings', classroomController.getClassroomSettings);
+// GET /api/classrooms/:id/settings - Get classroom settings (enrolled users only)
+router.get('/:id/settings', verifyEnrolled, classroomController.getClassroomSettings);
 
-// PUT /api/classrooms/:id/settings - Update classroom settings
-router.put('/:id/settings', classroomController.updateClassroomSettings);
+// PUT /api/classrooms/:id/settings - Update classroom settings (teacher only)
+router.put('/:id/settings', verifyTeacher, classroomController.updateClassroomSettings);
 
 // ===== PERMISSION ROUTES =====
 
-// GET /api/classrooms/:id/permissions - Get user permissions for classroom
-router.get('/:id/permissions', classroomController.getClassroomPermissions);
+// GET /api/classrooms/:id/permissions - Get user permissions for classroom (enrolled users only)
+router.get('/:id/permissions', verifyEnrolled, classroomController.getClassroomPermissions);
 
-// POST /api/classrooms/:id/permissions - Update user permissions
-router.post('/:id/permissions', classroomController.updateClassroomPermissions);
+// POST /api/classrooms/:id/permissions - Update user permissions (teacher only)
+router.post('/:id/permissions', verifyTeacher, classroomController.updateClassroomPermissions);
 
 // Error handling middleware for this router
 router.use((error, req, res, next) => {
